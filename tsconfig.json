@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@cbi/shared": ["packages/shared/src/index.ts"],
+      "@cbi/shared/*": ["packages/shared/src/*"],
+      "@cbi/parser": ["packages/parser/src/index.ts"],
+      "@cbi/graph": ["packages/graph/src/index.ts"],
+      "@cbi/analyzer": ["packages/analyzer/src/index.ts"],
+      "@cbi/search": ["packages/search/src/index.ts"],
+      "@cbi/ai": ["packages/ai/src/index.ts"],
+      "@cbi/reviewer": ["packages/reviewer/src/index.ts"],
+      "@cbi/github": ["packages/github/src/index.ts"],
+      "@cbi/db": ["packages/db/src/index.ts"],
+      "@/*": ["apps/web/*"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "apps/*/src/**/*.ts",
+    "apps/*/src/**/*.tsx",
+    "apps/web/app/**/*.ts",
+    "apps/web/app/**/*.tsx",
+    "apps/web/components/**/*.tsx",
+    "apps/web/lib/**/*.ts",
+    "workers/*/src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["**/node_modules", "**/dist", "**/.next", "tests/fixtures/**"]
+}

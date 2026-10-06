@@ -1,0 +1,23 @@
+{
+  "name": "@cbi/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/pipeline.ts",
+  "types": "src/pipeline.ts",
+  "exports": {
+    ".": "./src/pipeline.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@cbi/analyzer": "*",
+    "@cbi/db": "*",
+    "@cbi/github": "*",
+    "@cbi/graph": "*",
+    "@cbi/parser": "*",
+    "@cbi/shared": "*"
+  }
+}
