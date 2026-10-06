@@ -21,6 +21,37 @@ requests, this repository does not include a Vercel API route adapter or a
 durable serverless job runner. Deploying the API as a Vercel Function can lose
 queued work and does not keep PR polling alive.
 
+## Set up Supabase PostgreSQL
+
+The database package uses the standard PostgreSQL driver and the repository's
+versioned migrations; no Supabase client key or database adapter is needed.
+Supabase's publishable key is not a database credential and is not used by the
+API. Keep the database password and `DATABASE_URL` private.
+
+1. In the Supabase project, confirm the `vector` extension is available/enabled.
+   The initial migration also creates `vector` and `pgcrypto`.
+2. In **Project Settings → Database → Connect**, copy a PostgreSQL connection
+   string. Use the direct connection if the API host supports IPv6; otherwise
+   use Supabase's **Session pooler** connection string. The API is long-running,
+   so do not use the Transaction pooler for this deployment.
+3. Replace the password placeholder locally or in the API host's secret settings.
+   URL-encode special characters in the password (for example, `@` becomes
+   `%40`). Ensure the URL uses TLS, such as `?sslmode=require` (or
+   `&sslmode=require` if the URL already has query parameters).
+4. Run the repository migrations from the project root once, using the same
+   `DATABASE_URL` that the API will use:
+
+   ```sh
+   npm run migrate
+   ```
+
+5. Configure `DATABASE_URL` on the API host. Do not add it to Vercel's frontend
+   project or prefix it with `NEXT_PUBLIC_`.
+
+The migration command creates the application's tables and records applied
+migration versions in `schema_migrations`. It does not migrate data from another
+database.
+
 ## 1. Deploy the API
 
 Create a long-running Node service on a host such as Railway, Render, Fly.io,

@@ -26,6 +26,12 @@ export interface RepoRecord {
 
 const DEV_ORG_ID = 'local-org';
 
+async function resolveOrganizationId(organizationId: string): Promise<string> {
+  if (!usingDatabase() || organizationId !== DEV_ORG_ID) return organizationId;
+  const { organization } = await db.ensureBootstrap();
+  return organization.id;
+}
+
 /**
  * Without PostgreSQL the registry lived only in process memory, so every API
  * restart made connected repositories (and their PR pages) disappear. The
@@ -64,7 +70,7 @@ function defaultCheckoutPath(owner: string, name: string): string {
 
 export async function listRepos(organizationId = DEV_ORG_ID): Promise<RepoRecord[]> {
   if (usingDatabase()) {
-    const rows = await db.listRepositories(organizationId);
+    const rows = await db.listRepositories(await resolveOrganizationId(organizationId));
     const out: RepoRecord[] = [];
     for (const row of rows) {
       out.push({
@@ -97,8 +103,9 @@ export async function createRepo(input: {
   checkoutPath?: string;
   organizationId?: string;
 }): Promise<RepoRecord> {
-  const organizationId = input.organizationId ?? DEV_ORG_ID;
+  const requestedOrganizationId = input.organizationId ?? DEV_ORG_ID;
   if (usingDatabase()) {
+    const organizationId = await resolveOrganizationId(requestedOrganizationId);
     const row = await db.createRepository({
       organizationId,
       owner: input.owner,
@@ -126,6 +133,7 @@ export async function createRepo(input: {
     return record;
   }
 
+  const organizationId = requestedOrganizationId;
   const id = `repo_${uuid().slice(0, 8)}`;
   const record: RepoRecord = {
     id,
@@ -150,7 +158,7 @@ export async function createRepo(input: {
 
 export async function getRepo(id: string, organizationId = DEV_ORG_ID): Promise<RepoRecord | null> {
   if (usingDatabase()) {
-    const row = await db.getRepositoryForOrg(id, organizationId);
+    const row = await db.getRepositoryForOrg(id, await resolveOrganizationId(organizationId));
     if (!row) return null;
     const config = await db.getRepositoryConfig(id).catch(() => ({}) as Record<string, unknown>);
     return {
