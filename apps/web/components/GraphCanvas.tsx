@@ -24,7 +24,7 @@ export const LAYOUTS: Array<{
   { value: 'force', label: 'Force', description: 'Force-directed physics', bestFor: 'exploring any graph' },
   { value: 'radial', label: 'Radial', description: 'Radial tree around the root', bestFor: 'large repositories' },
   { value: 'cluster', label: 'Cluster', description: 'Dendrogram with aligned leaves', bestFor: 'comparing hierarchy levels' },
-  { value: 'collapsible', label: 'Tree', description: 'Collapsible tree — click to expand', bestFor: 'reading the containment flow' },
+  { value: 'collapsible', label: 'Hierarchy', description: 'Collapsible hierarchy — click to expand', bestFor: 'reading the containment flow' },
 ];
 
 /**
@@ -56,7 +56,7 @@ export function layoutRationale(
   if (layout === 'force' && (mode === 'api' || mode === 'calls')) {
     return `Force — ${nodeCount} flow nodes read best with physics, not a tree`;
   }
-  if (layout === 'collapsible') return `Tree — ${nodeCount} nodes read best as a step-by-step flow`;
+  if (layout === 'collapsible') return `Hierarchy — ${nodeCount} nodes read best as a step-by-step flow`;
   if (layout === 'cluster') return `Cluster — ${nodeCount} nodes, aligned leaves make levels comparable`;
   if (layout === 'radial') return `Radial — ${nodeCount} nodes, a large graph spreads best around the root`;
   return 'Force — free exploration';

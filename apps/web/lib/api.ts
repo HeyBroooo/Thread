@@ -1,4 +1,4 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+export const API_URL = '';
 
 export interface ApiNode {
   id: string;
@@ -122,16 +122,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    credentials: 'include',
     cache: 'no-store',
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    if (
+      res.status === 401 &&
+      body.error?.code === 'AUTH_REQUIRED' &&
+      typeof window !== 'undefined' &&
+      window.location.pathname !== '/login'
+    ) {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login?from=${encodeURIComponent(returnTo)}`);
+    }
     throw new Error(body.error?.message ?? `Request failed: ${res.status}`);
   }
   return (await res.json()) as T;
 }
 
 export const api = {
+  authSession: () => request<{ authenticated: boolean; username?: string }>('/api/auth/session'),
+  login: (username: string, password: string) =>
+    request<{ authenticated: boolean; username: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => request<{ authenticated: false }>('/api/auth/logout', { method: 'POST' }),
   listRepositories: () => request<{ repositories: RepositoryPayload[] }>('/api/repositories'),
   getRepository: (id: string) => request<{ repository: RepositoryPayload; latestJob: JobPayload | null }>(`/api/repositories/${id}`),
   createRepository: (input: {

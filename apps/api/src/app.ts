@@ -15,6 +15,14 @@ import { runIndexingJob } from '@cbi/indexer';
 import { runReviewJob, REVIEW_VERSION } from '@cbi/pr-reviewer';
 import * as db from '@cbi/db';
 import {
+  clearSessionCookie,
+  createSessionToken,
+  sessionCookie,
+  sessionTokenFromCookie,
+  verifyPassword,
+  verifySessionToken,
+} from './auth.js';
+import {
   aiProvider,
   chatService,
   createRepo,
@@ -46,6 +54,9 @@ import {
 } from './prStore.js';
 
 const log = createLogger({ component: 'api' });
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_ATTEMPT_LIMIT = 10;
+const LOGIN_WINDOW_MS = 15 * 60_000;
 
 export interface AppContext {
   Variables: {
@@ -71,7 +82,53 @@ export function createApp(): Hono<AppContext> {
     });
   });
 
-  app.use('/api/*', cors({ origin: (origin) => origin ?? '*', allowHeaders: ['content-type', 'x-request-id'], allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] }));
+  app.use(
+    '/api/*',
+    cors({
+      origin: (origin) => (origin === new URL(getConfig().appUrl).origin ? origin : ''),
+      allowHeaders: ['content-type', 'x-request-id', 'x-organization-id'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      credentials: true,
+    }),
+  );
+
+  app.use('/api/*', async (c, next) => {
+    const path = new URL(c.req.url).pathname;
+    const publicRoute =
+      c.req.method === 'OPTIONS' ||
+      path === '/api/auth/login' ||
+      path === '/api/auth/session' ||
+      path === '/api/auth/logout' ||
+      path === '/api/github/webhook' ||
+      path === '/api/webhooks/github';
+    if (publicRoute) return next();
+
+    const passwordHash = process.env.ADMIN_PASSWORD_HASH;
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!passwordHash || !sessionSecret || sessionSecret.length < 32) {
+      return c.json(
+        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
+        503,
+      );
+    }
+
+    const username = verifySessionToken(
+      sessionTokenFromCookie(c.req.header('cookie')),
+      sessionSecret,
+    );
+    if (username !== (process.env.ADMIN_USERNAME || 'Admin')) {
+      return c.json(
+        { error: { code: 'AUTH_REQUIRED', message: 'Sign in to access this application.' } },
+        401,
+      );
+    }
+
+    const origin = c.req.header('origin');
+    if (origin && !isAllowedBrowserOrigin(origin)) {
+      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
+    }
+    return next();
+  });
 
   app.onError((err, c) => {
     const requestId = c.get('requestId') ?? 'unknown';
@@ -95,6 +152,7 @@ export function createApp(): Hono<AppContext> {
     }),
   );
 
+  registerAuthRoutes(app);
   registerRepositoryRoutes(app);
   registerGraphRoutes(app);
   registerSearchRoutes(app);
@@ -106,6 +164,81 @@ export function createApp(): Hono<AppContext> {
   registerJobHandlers();
 
   return app;
+}
+
+function isAllowedBrowserOrigin(origin: string): boolean {
+  try {
+    return new URL(origin).origin === new URL(getConfig().appUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+function registerAuthRoutes(app: Hono<AppContext>): void {
+  app.get('/api/auth/session', (c) => {
+    const sessionSecret = process.env.SESSION_SECRET;
+    const configured = Boolean(process.env.ADMIN_PASSWORD_HASH && sessionSecret && sessionSecret.length >= 32);
+    if (!configured) {
+      return c.json(
+        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
+        503,
+      );
+    }
+    const username = verifySessionToken(
+      sessionTokenFromCookie(c.req.header('cookie')),
+      sessionSecret!,
+    );
+    return c.json({ authenticated: username === (process.env.ADMIN_USERNAME || 'Admin') });
+  });
+
+  app.post('/api/auth/login', async (c) => {
+    if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
+      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
+    }
+
+    const passwordHash = process.env.ADMIN_PASSWORD_HASH;
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!passwordHash || !sessionSecret || sessionSecret.length < 32) {
+      return c.json(
+        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
+        503,
+      );
+    }
+
+    const address = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const now = Date.now();
+    const previous = loginAttempts.get(address);
+    const attempt = previous && previous.resetAt > now ? previous : { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+    if (attempt.count >= LOGIN_ATTEMPT_LIMIT) {
+      return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many attempts. Try again later.' } }, 429);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as { username?: unknown; password?: unknown } | null;
+    const expectedUsername = process.env.ADMIN_USERNAME || 'Admin';
+    const username = typeof body?.username === 'string' ? body.username : '';
+    const password = typeof body?.password === 'string' ? body.password : '';
+    const validPassword = await verifyPassword(password, passwordHash);
+    if (username !== expectedUsername || !validPassword) {
+      attempt.count++;
+      loginAttempts.set(address, attempt);
+      return c.json({ error: { code: 'INVALID_CREDENTIALS', message: 'Username or password is incorrect.' } }, 401);
+    }
+
+    loginAttempts.delete(address);
+    c.header(
+      'set-cookie',
+      sessionCookie(createSessionToken(expectedUsername, sessionSecret), getConfig().nodeEnv === 'production'),
+    );
+    return c.json({ authenticated: true, username: expectedUsername });
+  });
+
+  app.post('/api/auth/logout', (c) => {
+    if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
+      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
+    }
+    c.header('set-cookie', clearSessionCookie(getConfig().nodeEnv === 'production'));
+    return c.json({ authenticated: false });
+  });
 }
 
 function orgIdOf(c: { req: { header: (k: string) => string | undefined } }): string {
@@ -1510,5 +1643,3 @@ function registerJobHandlers(): void {
     }
   });
 }
-
-

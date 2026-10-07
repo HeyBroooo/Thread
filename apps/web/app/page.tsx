@@ -85,8 +85,7 @@ export default function LandingPage() {
           >
             <p className="error">{error}</p>
             <p className="muted small">
-              Ensure the API is running (<code>npm run dev:api</code>) and reachable at{' '}
-              {process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'}.
+              Ensure the API is running and the Vercel API proxy target is configured correctly.
             </p>
           </motion.div>
         )}

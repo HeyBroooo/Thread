@@ -143,7 +143,7 @@ export class PgGraphStore implements GraphStore {
         const chunk = edges.slice(i, i + CHUNK);
         const values: unknown[] = [];
         const tuples = chunk.map((e, idx) => {
-          const b = idx * 13;
+          const b = idx * 12;
           values.push(
             e.id,
             e.repositoryId,

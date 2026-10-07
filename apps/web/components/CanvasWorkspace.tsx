@@ -18,7 +18,7 @@ import {
 import { NodeDetails } from './NodeDetails';
 
 const MODES: Array<{ value: CanvasMode; label: string }> = [
-  { value: 'full', label: 'Full system' },
+  { value: 'full', label: 'Full System' },
   { value: 'dependencies', label: 'Dependencies' },
   { value: 'components', label: 'Component tree' },
   { value: 'api', label: 'API flow' },
@@ -37,11 +37,7 @@ const GRAPH_VIEWS: Array<{
   layout: CanvasLayout;
   hint: string;
 }> = [
-  { id: 'overview', label: 'Full system', mode: 'full', layout: 'auto', hint: 'Everything, with the layout chosen for the repository size' },
-  { id: 'force', label: 'Force map', mode: 'full', layout: 'force', hint: 'Physics graph — free exploration' },
-  { id: 'radial', label: 'Radial', mode: 'full', layout: 'radial', hint: 'Radial tree around the root' },
-  { id: 'cluster', label: 'Clusters', mode: 'full', layout: 'cluster', hint: 'Grouped by level with aligned leaves' },
-  { id: 'tree', label: 'Hierarchy', mode: 'full', layout: 'collapsible', hint: 'Collapsible tree — click nodes to expand' },
+  { id: 'overview', label: 'Full System', mode: 'full', layout: 'collapsible', hint: 'Full repository in a collapsible hierarchy' },
   { id: 'dependencies', label: 'Dependencies', mode: 'dependencies', layout: 'cluster', hint: 'Files, packages and the import graph' },
   { id: 'components', label: 'Components', mode: 'components', layout: 'cluster', hint: 'Components with their render edges' },
   { id: 'api', label: 'API flow', mode: 'api', layout: 'force', hint: 'Routes, endpoints and the calls between them' },
@@ -75,7 +71,7 @@ export function CanvasWorkspace({
   const [counts, setCounts] = useState<{ nodes: number; edges: number } | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [mode, setMode] = useState<CanvasMode>('full');
-  const [layout, setLayout] = useState<CanvasLayout>('auto');
+  const [layout, setLayout] = useState<CanvasLayout>('collapsible');
   const [restored, setRestored] = useState(false);
   const [selected, setSelected] = useState<ApiNode | null>(null);
   const [highlight, setHighlight] = useState<string[]>(initialHighlight);
@@ -116,8 +112,9 @@ export function CanvasWorkspace({
       const raw = window.localStorage.getItem(`cbi.canvas.view.${repositoryId}`);
       if (raw) {
         const saved = JSON.parse(raw) as { mode?: string; layout?: string };
-        setMode(coerceCanvasMode(saved.mode));
-        setLayout(coerceCanvasLayout(saved.layout));
+        const savedMode = coerceCanvasMode(saved.mode);
+        setMode(savedMode);
+        setLayout(savedMode === 'full' ? 'collapsible' : coerceCanvasLayout(saved.layout));
       }
     } catch {
       // private mode / corrupt JSON — fall back to the defaults
@@ -189,9 +186,10 @@ export function CanvasWorkspace({
   // Match the node count GraphCanvas actually renders for this mode, so the
   // auto-layout badge never disagrees with the canvas.
   const visibleNodeCount = modeVisibleNodes(nodes, edges, mode).length;
-  const resolved = resolveLayout(layout, visibleNodeCount, mode);
+  const activeLayout = mode === 'full' ? 'collapsible' : layout;
+  const resolved = resolveLayout(activeLayout, visibleNodeCount, mode);
   const activeViewId =
-    GRAPH_VIEWS.find((v) => v.mode === mode && v.layout === layout)?.id ?? null;
+    GRAPH_VIEWS.find((v) => v.mode === mode && v.layout === activeLayout)?.id ?? null;
 
   return (
     <div className="canvas-layout no-sidebar" style={{ height: '100%' }}>
@@ -205,14 +203,27 @@ export function CanvasWorkspace({
             />
             <button type="submit">Search</button>
           </form>
-          <select value={mode} onChange={(e) => setMode(e.target.value as CanvasMode)} title="View mode">
+          <select
+            value={mode}
+            onChange={(e) => {
+              const nextMode = e.target.value as CanvasMode;
+              setMode(nextMode);
+              if (nextMode === 'full') setLayout('collapsible');
+            }}
+            title="View mode"
+          >
             {MODES.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
               </option>
             ))}
           </select>
-          <select value={layout} onChange={(e) => setLayout(e.target.value as CanvasLayout)} title="Graph layout">
+          <select
+            value={activeLayout}
+            onChange={(e) => setLayout(e.target.value as CanvasLayout)}
+            title="Graph layout"
+            disabled={mode === 'full'}
+          >
             {LAYOUTS.map((l) => (
               <option key={l.value} value={l.value}>
                 {l.label}
@@ -312,7 +323,7 @@ export function CanvasWorkspace({
             nodes={nodes}
             edges={edges}
             mode={mode}
-            layout={layout}
+            layout={activeLayout}
             selectedNodeId={selected?.id ?? null}
             highlightIds={highlight}
             focusNodeId={focusNodeId}
@@ -339,7 +350,7 @@ export function CanvasWorkspace({
               {counts ? `${counts.nodes} nodes · ${counts.edges} relationships` : ''}
               {truncated ? ' · view truncated' : ''}
             </span>
-            {layout === 'auto' && visibleNodeCount > 0 && (
+            {activeLayout === 'auto' && visibleNodeCount > 0 && (
               <span className="auto-badge" title={layoutRationale(resolved, visibleNodeCount, mode)}>
                 ✦ Auto → {resolved}
               </span>
