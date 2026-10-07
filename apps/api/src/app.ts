@@ -1,6 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { existsSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { createElement } from 'react';
+import { render } from '@react-email/render';
 import { AppError, Errors, createLogger, getConfig, isAppError, uuid, type EdgeType, type GraphEdge, type GraphNode, type NodeType } from '@cbi/shared';
 import {
   cloneOrPull,
@@ -16,23 +19,29 @@ import { runReviewJob, REVIEW_VERSION } from '@cbi/pr-reviewer';
 import * as db from '@cbi/db';
 import {
   clearSessionCookie,
+  createIdentitySessionToken,
+  createSignedToken,
   createSessionToken,
   sessionCookie,
   sessionTokenFromCookie,
-  verifyPassword,
-  verifySessionToken,
+  verifyConfiguredPassword,
+  verifySessionClaims,
+  verifySignedToken,
 } from './auth.js';
+import { MagicLinkEmail } from './MagicLinkEmail.js';
 import {
   aiProvider,
   chatService,
   createRepo,
   createSearchService,
   ensureBootstrapIfNeeded,
+  deleteRepo,
   getRepo,
   graphStore,
   listRepos,
   sourceRegistry,
   updateRepo,
+  updateRepoBranch,
   usingDatabase,
   type RepoRecord,
 } from './services.js';
@@ -57,6 +66,14 @@ const log = createLogger({ component: 'api' });
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_ATTEMPT_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60_000;
+const SUPABASE_STATE_COOKIE = 'cbi_supabase_oauth_state';
+
+class SupabaseAuthError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'SupabaseAuthError';
+  }
+}
 
 export interface AppContext {
   Variables: {
@@ -96,29 +113,42 @@ export function createApp(): Hono<AppContext> {
     const path = new URL(c.req.url).pathname;
     const publicRoute =
       c.req.method === 'OPTIONS' ||
-      path === '/api/auth/login' ||
       path === '/api/auth/session' ||
       path === '/api/auth/logout' ||
+      path === '/api/auth/entry' ||
+      path === '/api/auth/login' ||
+      path === '/api/auth/magic-link' ||
+      path === '/api/auth/magic/verify' ||
+      path === '/api/auth/google/start' ||
+      path === '/api/auth/supabase/callback' ||
       path === '/api/github/webhook' ||
       path === '/api/webhooks/github';
     if (publicRoute) return next();
 
-    const passwordHash = process.env.ADMIN_PASSWORD_HASH;
     const sessionSecret = process.env.SESSION_SECRET;
-    if (!passwordHash || !sessionSecret || sessionSecret.length < 32) {
+    if (!authIsConfigured() || !sessionSecret) {
       return c.json(
         { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
         503,
       );
     }
 
-    const username = verifySessionToken(
+    const claims = verifySessionClaims(
       sessionTokenFromCookie(c.req.header('cookie')),
       sessionSecret,
     );
-    if (username !== (process.env.ADMIN_USERNAME || 'Admin')) {
+    if (
+      claims?.username !== (process.env.ADMIN_USERNAME || 'Admin') ||
+      claims.entryVerified !== true ||
+      !claims.email
+    ) {
       return c.json(
-        { error: { code: 'AUTH_REQUIRED', message: 'Sign in to access this application.' } },
+        {
+          error: {
+            code: claims?.email ? 'ENTRY_PASSWORD_REQUIRED' : 'AUTH_REQUIRED',
+            message: claims?.email ? 'Enter the workspace password to continue.' : 'Sign in to access this application.',
+          },
+        },
         401,
       );
     }
@@ -174,69 +204,347 @@ function isAllowedBrowserOrigin(origin: string): boolean {
   }
 }
 
+function authIsConfigured(): boolean {
+  const sessionSecret = process.env.SESSION_SECRET;
+  return Boolean(
+    (process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD_HASH) &&
+      sessionSecret &&
+      sessionSecret.length >= 32 &&
+      process.env.SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+}
+
+function requestAddress(c: Context<AppContext>): string {
+  return c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+}
+
+function loginRateLimited(address: string): boolean {
+  const attempt = loginAttempts.get(address);
+  return Boolean(attempt && attempt.resetAt > Date.now() && attempt.count >= LOGIN_ATTEMPT_LIMIT);
+}
+
+function noteLoginAttempt(address: string): void {
+  const now = Date.now();
+  const existing = loginAttempts.get(address);
+  const attempt = existing && existing.resetAt > now ? existing : { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+  attempt.count++;
+  loginAttempts.set(address, attempt);
+}
+
+function safeReturnPath(value: string | null | undefined): string {
+  return value?.startsWith('/') && !value.startsWith('//') ? value : '/';
+}
+
+function appUrl(path: string): string {
+  return new URL(path, getConfig().appUrl).toString();
+}
+
+function clearCookie(name: string, secure: boolean): string {
+  return [
+    `${name}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0',
+    ...(secure ? ['Secure'] : []),
+  ].join('; ');
+}
+
+function supabaseConfig(): { url: string; serviceKey: string } {
+  const url = process.env.SUPABASE_URL?.replace(/\/+$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new AppError('SUPABASE_AUTH_NOT_CONFIGURED', 'Supabase authentication is not configured on the API.', 503);
+  }
+  return { url, serviceKey };
+}
+
+async function supabaseAuthRequest<T>(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const { url, serviceKey } = supabaseConfig();
+  const response = await fetch(`${url}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: serviceKey,
+      authorization: `Bearer ${serviceKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const details = await response.json().catch(() => null) as {
+      msg?: unknown;
+      message?: unknown;
+      error_description?: unknown;
+    } | null;
+    const message =
+      (typeof details?.msg === 'string' && details.msg) ||
+      (typeof details?.message === 'string' && details.message) ||
+      (typeof details?.error_description === 'string' && details.error_description) ||
+      `Supabase authentication failed (${response.status}).`;
+    throw new SupabaseAuthError(response.status, message);
+  }
+  return (await response.json()) as T;
+}
+
+async function generateSupabaseMagicLink(email: string): Promise<string> {
+  const generate = () =>
+    supabaseAuthRequest<{ hashed_token?: unknown; token_hash?: unknown }>('admin/generate_link', {
+      type: 'magiclink',
+      email,
+      options: { redirectTo: appUrl('/api/auth/magic/verify') },
+    });
+  let generated: { hashed_token?: unknown; token_hash?: unknown };
+  try {
+    generated = await generate();
+  } catch (error) {
+    if (!(error instanceof SupabaseAuthError) || !/user not found/i.test(error.message)) throw error;
+    await supabaseAuthRequest('admin/users', {
+      email,
+      email_confirm: true,
+      password: randomBytes(32).toString('hex'),
+    });
+    generated = await generate();
+  }
+  const tokenHash =
+    typeof generated.hashed_token === 'string'
+      ? generated.hashed_token
+      : typeof generated.token_hash === 'string'
+        ? generated.token_hash
+        : null;
+  if (!tokenHash) throw new AppError('SUPABASE_AUTH_FAILED', 'Supabase did not return a magic-link token.', 502);
+  return tokenHash;
+}
+
+async function sendMagicLink(email: string, signInUrl: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.AUTH_EMAIL_FROM || 'ArchThread <onboarding@resend.dev>';
+  if (!apiKey) {
+    throw new AppError('MAGIC_LINK_NOT_CONFIGURED', 'Set RESEND_API_KEY on the API service to send sign-in links.', 503);
+  }
+  const html = await render(createElement(MagicLinkEmail, { signInUrl, productName: 'ArchThread' }));
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject: 'Your secure sign-in link for ArchThread',
+      html,
+    }),
+  });
+  if (!response.ok) {
+    log.error('auth.magic_link_send_failed', { status: response.status });
+    throw new AppError('MAGIC_LINK_SEND_FAILED', 'Could not send the sign-in email. Please try again.', 502);
+  }
+}
+
 function registerAuthRoutes(app: Hono<AppContext>): void {
   app.get('/api/auth/session', (c) => {
     const sessionSecret = process.env.SESSION_SECRET;
-    const configured = Boolean(process.env.ADMIN_PASSWORD_HASH && sessionSecret && sessionSecret.length >= 32);
-    if (!configured) {
+    if (!authIsConfigured() || !sessionSecret) {
       return c.json(
         { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
         503,
       );
     }
-    const username = verifySessionToken(
+    const claims = verifySessionClaims(
       sessionTokenFromCookie(c.req.header('cookie')),
-      sessionSecret!,
+      sessionSecret,
     );
-    return c.json({ authenticated: username === (process.env.ADMIN_USERNAME || 'Admin') });
+    const identityAuthenticated = Boolean(claims?.email);
+    const authenticated =
+      claims?.username === (process.env.ADMIN_USERNAME || 'Admin') &&
+      claims.entryVerified === true &&
+      Boolean(claims.email);
+    return c.json({ authenticated, identityAuthenticated, ...(claims?.email ? { email: claims.email } : {}) });
   });
 
-  app.post('/api/auth/login', async (c) => {
+  app.get('/api/auth/google/start', (c) => {
+    const sessionSecret = process.env.SESSION_SECRET;
+    let config: ReturnType<typeof supabaseConfig>;
+    try {
+      config = supabaseConfig();
+    } catch {
+      return c.json({ error: { code: 'SUPABASE_AUTH_NOT_CONFIGURED', message: 'Supabase authentication is not configured.' } }, 503);
+    }
+    if (!sessionSecret || sessionSecret.length < 32) {
+      return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Session signing is not configured.' } }, 503);
+    }
+    const state = randomBytes(32).toString('base64url');
+    const verifier = randomBytes(32).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const returnTo = safeReturnPath(c.req.query('from'));
+    const signedState = createSignedToken({ purpose: 'supabase-oauth', state, verifier, returnTo }, sessionSecret, 10 * 60);
+    const callbackUrl = new URL('/api/auth/supabase/callback', getConfig().appUrl);
+    callbackUrl.searchParams.set('state', state);
+    callbackUrl.searchParams.set('from', returnTo);
+    const authorization = new URL(`${config.url}/auth/v1/authorize`);
+    authorization.searchParams.set('provider', 'google');
+    authorization.searchParams.set('redirect_to', callbackUrl.toString());
+    authorization.searchParams.set('code_challenge', challenge);
+    authorization.searchParams.set('code_challenge_method', 's256');
+    c.header(
+      'set-cookie',
+      `${SUPABASE_STATE_COOKIE}=${signedState}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${getConfig().nodeEnv === 'production' ? '; Secure' : ''}`,
+    );
+    return c.redirect(authorization.toString(), 302);
+  });
+
+  app.get('/api/auth/supabase/callback', async (c) => {
+    const sessionSecret = process.env.SESSION_SECRET;
+    const stateCookie = c.req.header('cookie')?.split(';').map((part) => part.trim())
+      .find((part) => part.startsWith(`${SUPABASE_STATE_COOKIE}=`))?.slice(SUPABASE_STATE_COOKIE.length + 1);
+    const state = c.req.query('state');
+    const signedState = sessionSecret ? verifySignedToken(stateCookie, sessionSecret) : null;
+    if (
+      !sessionSecret ||
+      !state ||
+      !signedState ||
+      signedState.purpose !== 'supabase-oauth' ||
+      signedState.state !== state
+    ) {
+      c.header('set-cookie', clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'));
+      return c.redirect(appUrl('/login?error=supabase'), 302);
+    }
+    if (c.req.query('error')) return c.redirect(appUrl('/login?error=supabase'), 302);
+    const code = c.req.query('code');
+    if (!code || typeof signedState.verifier !== 'string') return c.redirect(appUrl('/login?error=supabase'), 302);
+
+    try {
+      const tokens = await supabaseAuthRequest<{
+        access_token?: unknown;
+        user?: { email?: unknown };
+      }>('token?grant_type=pkce', {
+        auth_code: code,
+        code_verifier: signedState.verifier,
+      });
+      if (typeof tokens.access_token !== 'string' || typeof tokens.user?.email !== 'string') {
+        throw new Error('Supabase did not return a verified user session.');
+      }
+      c.header(
+        'set-cookie',
+        sessionCookie(createIdentitySessionToken(tokens.user.email.toLowerCase(), sessionSecret), getConfig().nodeEnv === 'production'),
+      );
+      c.header(
+        'set-cookie',
+        clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'),
+        { append: true },
+      );
+      const destination = safeReturnPath(typeof signedState.returnTo === 'string' ? signedState.returnTo : null);
+      return c.redirect(appUrl(`/login?entry=1&from=${encodeURIComponent(destination)}`), 302);
+    } catch (error) {
+      log.warn('auth.supabase_oauth_callback_failed', { message: error instanceof Error ? error.message : String(error) });
+      return c.redirect(appUrl('/login?error=supabase'), 302);
+    }
+  });
+
+  app.post('/api/auth/magic-link', async (c) => {
     if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
       return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
     }
-
-    const passwordHash = process.env.ADMIN_PASSWORD_HASH;
-    const sessionSecret = process.env.SESSION_SECRET;
-    if (!passwordHash || !sessionSecret || sessionSecret.length < 32) {
-      return c.json(
-        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
-        503,
-      );
+    if (!authIsConfigured()) {
+      return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured.' } }, 503);
     }
-
-    const address = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    const now = Date.now();
-    const previous = loginAttempts.get(address);
-    const attempt = previous && previous.resetAt > now ? previous : { count: 0, resetAt: now + LOGIN_WINDOW_MS };
-    if (attempt.count >= LOGIN_ATTEMPT_LIMIT) {
+    const address = requestAddress(c);
+    if (loginRateLimited(address)) {
       return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many attempts. Try again later.' } }, 429);
     }
-
-    const body = (await c.req.json().catch(() => null)) as { username?: unknown; password?: unknown } | null;
-    const expectedUsername = process.env.ADMIN_USERNAME || 'Admin';
-    const username = typeof body?.username === 'string' ? body.username : '';
-    const password = typeof body?.password === 'string' ? body.password : '';
-    const validPassword = await verifyPassword(password, passwordHash);
-    if (username !== expectedUsername || !validPassword) {
-      attempt.count++;
-      loginAttempts.set(address, attempt);
-      return c.json({ error: { code: 'INVALID_CREDENTIALS', message: 'Username or password is incorrect.' } }, 401);
+    const body = (await c.req.json().catch(() => null)) as { email?: unknown; from?: unknown } | null;
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ error: { code: 'INVALID_EMAIL', message: 'Enter a valid email address.' } }, 400);
     }
+    if (!process.env.RESEND_API_KEY) {
+      return c.json({ error: { code: 'MAGIC_LINK_NOT_CONFIGURED', message: 'Set RESEND_API_KEY on the API service to send sign-in links.' } }, 503);
+    }
+    const returnTo = safeReturnPath(typeof body?.from === 'string' ? body.from : null);
+    try {
+      const tokenHash = await generateSupabaseMagicLink(email);
+      const link = new URL('/api/auth/magic/verify', getConfig().appUrl);
+      link.searchParams.set('token_hash', tokenHash);
+      link.searchParams.set('from', returnTo);
+      await sendMagicLink(email, link.toString());
+    } catch (error) {
+      log.warn('auth.magic_link_request_failed', { message: error instanceof Error ? error.message : String(error) });
+      if (error instanceof AppError) throw error;
+      throw new AppError('MAGIC_LINK_REQUEST_FAILED', 'Could not prepare a sign-in link. Please try again.', 502);
+    }
+    noteLoginAttempt(address);
+    return c.json({ sent: true });
+  });
 
+  app.get('/api/auth/magic/verify', async (c) => {
+    const sessionSecret = process.env.SESSION_SECRET;
+    const tokenHash = c.req.query('token_hash');
+    if (!sessionSecret || !tokenHash) return c.redirect(appUrl('/login?error=magic-link'), 302);
+    try {
+      const verified = await supabaseAuthRequest<{
+        user?: { email?: unknown };
+      }>('verify', { token_hash: tokenHash, type: 'magiclink' });
+      if (typeof verified.user?.email !== 'string') {
+        return c.redirect(appUrl('/login?error=magic-link'), 302);
+      }
+      c.header(
+        'set-cookie',
+        sessionCookie(createIdentitySessionToken(verified.user.email.toLowerCase(), sessionSecret), getConfig().nodeEnv === 'production'),
+      );
+      const destination = safeReturnPath(c.req.query('from'));
+      return c.redirect(appUrl(`/login?entry=1&from=${encodeURIComponent(destination)}`), 302);
+    } catch (error) {
+      log.warn('auth.magic_link_verify_failed', { message: error instanceof Error ? error.message : String(error) });
+      return c.redirect(appUrl('/login?error=magic-link'), 302);
+    }
+  });
+
+  const enterWorkspace = async (c: Context<AppContext>) => {
+    if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
+      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
+    }
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!authIsConfigured() || !sessionSecret) {
+      return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured.' } }, 503);
+    }
+    const claims = verifySessionClaims(sessionTokenFromCookie(c.req.header('cookie')), sessionSecret);
+    if (!claims?.email) {
+      return c.json({ error: { code: 'IDENTITY_REQUIRED', message: 'Sign in with Google or a magic link first.' } }, 401);
+    }
+    const address = requestAddress(c);
+    if (loginRateLimited(address)) {
+      return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many attempts. Try again later.' } }, 429);
+    }
+    const body = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
+    const password = typeof body?.password === 'string' ? body.password : '';
+    if (!(await verifyConfiguredPassword(password))) {
+      noteLoginAttempt(address);
+      return c.json({ error: { code: 'INVALID_ENTRY_PASSWORD', message: 'The entry password is incorrect.' } }, 401);
+    }
     loginAttempts.delete(address);
     c.header(
       'set-cookie',
-      sessionCookie(createSessionToken(expectedUsername, sessionSecret), getConfig().nodeEnv === 'production'),
+      sessionCookie(
+        createSessionToken(process.env.ADMIN_USERNAME || 'Admin', sessionSecret, Date.now(), {
+          email: claims.email,
+          entryVerified: true,
+        }),
+        getConfig().nodeEnv === 'production',
+      ),
     );
-    return c.json({ authenticated: true, username: expectedUsername });
-  });
+    return c.json({ authenticated: true, username: process.env.ADMIN_USERNAME || 'Admin' });
+  };
+
+  app.post('/api/auth/entry', enterWorkspace);
+  app.post('/api/auth/login', enterWorkspace);
 
   app.post('/api/auth/logout', (c) => {
     if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
       return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
     }
     c.header('set-cookie', clearSessionCookie(getConfig().nodeEnv === 'production'));
+    c.header('set-cookie', clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'), { append: true });
     return c.json({ authenticated: false });
   });
 }
@@ -297,7 +605,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       branch = branch ?? parsed.branch ?? undefined;
     }
 
-    const wantsClone = !checkoutPathInput || Boolean(repoUrl);
+    const wantsClone = !checkoutPathInput || Boolean(repoUrl) || Boolean(branch);
     let checkoutPath = checkoutPathInput;
     let cloned = null;
 
@@ -315,7 +623,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       owner,
       name,
       branch,
-      defaultBranch: body.defaultBranch ?? branch,
+      defaultBranch: body.defaultBranch ?? cloned?.branch ?? branch,
       checkoutPath,
       organizationId: orgIdOf(c),
     });
@@ -446,6 +754,82 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     return c.json({ repository: serializeRepo(repo), latestJob: job ? serializeJob(job) : null });
   });
 
+  app.patch('/api/repositories/:id/branch', async (c) => {
+    const repositoryId = c.req.param('id');
+    const organizationId = orgIdOf(c);
+    const repo = await requireRepo(repositoryId, organizationId);
+    const body = (await c.req.json().catch(() => null)) as { branch?: unknown } | null;
+    const branch = typeof body?.branch === 'string' ? body.branch.trim() : '';
+    if (!branch || branch.length > 255 || /[\u0000-\u001f\u007f]/.test(branch)) {
+      throw Errors.badRequest('Enter a valid branch name (1–255 characters).');
+    }
+    const duplicate = (await listRepos(organizationId)).find(
+      (candidate) =>
+        candidate.id !== repo.id &&
+        candidate.owner.toLowerCase() === repo.owner.toLowerCase() &&
+        candidate.name.toLowerCase() === repo.name.toLowerCase() &&
+        candidate.branch === branch,
+    );
+    if (duplicate) {
+      throw new AppError(
+        'BRANCH_ALREADY_CONNECTED',
+        `Branch "${branch}" is already connected for ${repo.owner}/${repo.name}.`,
+        409,
+      );
+    }
+    if (jobQueue.list(repo.id).some((job) => job.status === 'RUNNING' || job.status === 'QUEUED')) {
+      throw new AppError('REPOSITORY_BUSY', 'Wait for the current repository job to finish before switching branches.', 409);
+    }
+
+    const credential = await resolveCloneCredential({ owner: repo.owner, name: repo.name });
+    const cloned = await cloneOrPull({
+      owner: repo.owner,
+      name: repo.name,
+      branch,
+      token: credential.token,
+      existingPath: repo.checkoutPath,
+    });
+    await updateRepoBranch(repo.id, organizationId, cloned.branch);
+    await graphStore().clearRepository(repo.id);
+    const job = jobQueue.enqueue(
+      'index',
+      repo.id,
+      {
+        checkoutPath: cloned.checkoutPath,
+        commitSha: cloned.commitSha,
+        incremental: false,
+        changedFiles: [],
+      },
+      c.get('requestId'),
+    );
+    await updateRepo(repo.id, { indexStatus: 'QUEUED', error: null });
+    return c.json({
+      repository: { ...serializeRepo({ ...repo, branch: cloned.branch, defaultBranch: cloned.branch, indexStatus: 'QUEUED' }) },
+      job: serializeJob(job),
+    }, 202);
+  });
+
+  app.delete('/api/repositories/:id', async (c) => {
+    const repositoryId = c.req.param('id');
+    const organizationId = orgIdOf(c);
+    await requireRepo(repositoryId, organizationId);
+    if (!jobQueue.removeRepositoryJobs(repositoryId)) {
+      throw new AppError('REPOSITORY_BUSY', 'Wait for active repository work to finish before removing it.', 409);
+    }
+    await graphStore().clearRepository(repositoryId);
+    if (usingDatabase()) {
+      await db.writeAuditLog({
+        organizationId,
+        repositoryId,
+        action: 'repository.deleted',
+        metadata: {},
+        requestId: c.get('requestId'),
+      });
+    }
+    await deleteRepo(repositoryId, organizationId);
+    return c.json({ deleted: true });
+  });
+
   app.post('/api/repositories/:id/index', async (c) => {
     const repo = await requireRepo(c.req.param('id'), orgIdOf(c));
     const body = (await c.req.json().catch(() => ({}))) as {
@@ -502,7 +886,6 @@ function serializeRepo(repo: RepoRecord) {
     graphSchemaVersion: repo.graphSchemaVersion,
     lastIndexedAt: repo.lastIndexedAt,
     error: repo.error,
-    checkoutPath: repo.checkoutPath,
   };
 }
 
@@ -1299,6 +1682,11 @@ function registerWebhookRoutes(app: Hono<AppContext>): void {
               metadata: { number: event.pullRequestNumber, action: event.action },
               requestId: c.get('requestId'),
             });
+          }
+          try {
+            supabaseConfig();
+          } catch {
+            return c.redirect(appUrl('/login?error=supabase'), 302);
           }
         } else {
           log.warn('webhook.repository_not_connected', { owner: event.owner, repo: event.repo });

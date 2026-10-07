@@ -44,6 +44,18 @@ Set these as secrets in whatever host you use. Never commit `.env`.
 | `GITHUB_WEBHOOK_SECRET` | If you want GitHub webhooks | Webhook secret |
 | `GITHUB_TOKEN` | Optional | Personal access token fallback for clone + review |
 | `APP_URL` | Optional | Public HTTPS web URL; also hosts the logo shown in GitHub review comments |
+| `ADMIN_PASSWORD` | Required for app access | Shared workspace password, required after identity sign-in |
+| `ADMIN_PASSWORD_HASH` | Optional alternative | Scrypt hash alternative to `ADMIN_PASSWORD` |
+| `SESSION_SECRET` | Required for app access | Random secret of at least 32 characters |
+| `SUPABASE_URL` | Required for sign-in | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Required for sign-in | Server-only Supabase service-role key |
+| `RESEND_API_KEY` | Required for email links | Resend key; set on the API host (Render) |
+| `AUTH_EMAIL_FROM` | Optional | Verified Resend sender override |
+| `API_PROXY_TARGET` | Web host | API origin used by the server-side Next.js rewrite |
+
+Configure the Google provider in Supabase's dashboard and allow
+`https://<app-host>/api/auth/supabase/callback` as a Supabase redirect URL.
+Google OAuth client credentials are not application environment variables.
 | `OPENROUTER_API_KEY` | For chat | Model provider key |
 | `DATABASE_URL` | Optional (degrades gracefully without) | Postgres DSN for persistent graph/repos/PRs |
 | `REDIS_URL` | Reserved | The current job queue is in-process and does not use Redis |
@@ -64,9 +76,9 @@ Vercel Function with the current in-process job queue and PR poller.
 
 ## Common issues
 
-- Frontend calls localhost after deploy: `NEXT_PUBLIC_API_URL` was not set, so
-  the built client still points at `localhost:8787`. Set it to the deployed API
-  URL.
+- Browser API requests should use same-origin `/api/*` paths. Configure
+  `API_PROXY_TARGET` on the Next.js host; it is server-side and must not use a
+  `NEXT_PUBLIC_*` prefix.
 - Indexed repos disappear after a deploy or restart: the graph is in-memory with
   no `DATABASE_URL` and the ephemeral filesystem does not survive. Add
   `DATABASE_URL`, or accept the reset for a demo.
@@ -87,7 +99,7 @@ Vercel Function with the current in-process job queue and PR poller.
 - [ ] `npm run typecheck` passes
 - [ ] `npm test` passes
 - [ ] `.env` variables are set as secrets on the host(s), not committed
-- [ ] `NEXT_PUBLIC_API_URL` points at the deployed API
+- [ ] `API_PROXY_TARGET` points at the deployed API from the Next.js host
 - [ ] GitHub App installed / token saved, if you want PR reviews
 - [ ] Webhook URL registered in GitHub, if you want webhook-triggered reviews
 - [ ] `DATABASE_URL` set if you want persistent graphs/repos/PRs

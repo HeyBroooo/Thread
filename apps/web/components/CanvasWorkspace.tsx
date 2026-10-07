@@ -16,6 +16,9 @@ import {
   type CanvasLayout,
 } from './GraphCanvas';
 import { NodeDetails } from './NodeDetails';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 
 const MODES: Array<{ value: CanvasMode; label: string }> = [
   { value: 'full', label: 'Full System' },
@@ -55,12 +58,14 @@ const MODE_HINTS: Record<CanvasMode, string> = {
 
 export function CanvasWorkspace({
   repositoryId,
+  repositoryBranch,
   status,
   indexStatus,
   initialHighlight = [],
   initialFocusNodeId = null,
 }: {
   repositoryId: string;
+  repositoryBranch?: string;
   status?: string;
   indexStatus: string;
   initialHighlight?: string[];
@@ -99,7 +104,7 @@ export function CanvasWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [repositoryId]);
+  }, [repositoryId, repositoryBranch]);
 
   useEffect(() => {
     void loadFullGraph();
@@ -196,14 +201,14 @@ export function CanvasWorkspace({
       <div className="canvas-center">
         <div className="canvas-toolbar">
           <form onSubmit={runSearch} style={{ display: 'flex', gap: 8, flex: 1, minWidth: 200 }}>
-            <input
+            <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search symbols, files, endpoints…"
             />
-            <button type="submit">Search</button>
+            <Button type="submit" size="sm">Search</Button>
           </form>
-          <select
+          <Select
             value={mode}
             onChange={(e) => {
               const nextMode = e.target.value as CanvasMode;
@@ -217,8 +222,8 @@ export function CanvasWorkspace({
                 {m.label}
               </option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             value={activeLayout}
             onChange={(e) => setLayout(e.target.value as CanvasLayout)}
             title="Graph layout"
@@ -229,17 +234,18 @@ export function CanvasWorkspace({
                 {l.label}
               </option>
             ))}
-          </select>
-          <button type="button" onClick={() => void loadFullGraph()}>
+          </Select>
+          <Button type="button" size="sm" variant="outline" onClick={() => void loadFullGraph()}>
             Reset
-          </button>
+          </Button>
           <div className="view-switcher">
             <span className="view-switcher-label">Graph view</span>
             <div className="view-chips">
               {GRAPH_VIEWS.map((v) => (
-                <button
+                <Button
                   key={v.id}
                   type="button"
+                  variant="ghost"
                   className={`chip${activeViewId === v.id ? ' active' : ''}`}
                   title={v.hint}
                   aria-pressed={activeViewId === v.id}
@@ -249,7 +255,7 @@ export function CanvasWorkspace({
                   }}
                 >
                   {v.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -258,7 +264,7 @@ export function CanvasWorkspace({
         <AnimatePresence>
           {results.length > 0 && (
             <motion.div
-              className="panel"
+              className="panel ui-card"
               style={{ position: 'absolute', top: 104, left: 12, width: 340, maxHeight: 320, borderRadius: 10, border: '1px solid var(--border)', zIndex: 6 }}
               initial={{ opacity: 0, y: -8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -267,9 +273,9 @@ export function CanvasWorkspace({
             >
               <div className="card-header">
                 <span className="label">Search results</span>
-                <button type="button" className="link-button" onClick={() => setResults([])}>
+                <Button type="button" className="link-button" variant="link" size="sm" onClick={() => setResults([])}>
                   clear
-                </button>
+                </Button>
               </div>
               <ul className="repo-list">
                 {results.map((r, i) => (
@@ -280,8 +286,9 @@ export function CanvasWorkspace({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.2 }}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       className="result-row"
                       onClick={() => void focusNodeById(r.nodeId)}
                     >
@@ -291,7 +298,7 @@ export function CanvasWorkspace({
                         {r.filePath ? ` · ${r.filePath}` : ''}
                         {r.score ? ` · ${(r.score * 100).toFixed(0)}% match` : ''}
                       </span>
-                    </button>
+                    </Button>
                   </motion.li>
                 ))}
               </ul>
@@ -300,7 +307,7 @@ export function CanvasWorkspace({
         </AnimatePresence>
 
         {loading ? (
-          <div className="panel" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+          <div className="panel ui-card" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
             <div style={{ textAlign: 'center' }}>
               <div className="skeleton" style={{ width: 220, height: 10, margin: '0 auto 10px' }} />
               <div className="skeleton" style={{ width: 150, height: 10, margin: '0 auto' }} />
@@ -308,7 +315,7 @@ export function CanvasWorkspace({
             </div>
           </div>
         ) : visibleNodeCount === 0 ? (
-          <div className="panel" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+          <div className="panel ui-card" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
             <div style={{ textAlign: 'center', maxWidth: 380 }}>
               <div style={{ fontSize: 26, marginBottom: 6 }}>🧭</div>
               <h3>Nothing in this view</h3>

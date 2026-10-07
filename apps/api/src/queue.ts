@@ -90,6 +90,14 @@ export class JobQueue {
     return this.list(repositoryId).find((j) => !kind || j.kind === kind) ?? null;
   }
 
+  removeRepositoryJobs(repositoryId: string): boolean {
+    if (this.list(repositoryId).some((job) => job.status === 'RUNNING')) return false;
+    const removed = new Set(this.list(repositoryId).map((job) => job.id));
+    this.order = this.order.filter((id) => !removed.has(id));
+    for (const id of removed) this.jobs.delete(id);
+    return true;
+  }
+
   private trim(): void {
     while (this.order.length > MAX_KEEP) {
       const id = this.order.shift();

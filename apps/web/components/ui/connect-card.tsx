@@ -1,18 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type RepositoryPayload } from '@/lib/api';
+import { useState } from 'react';
+import { api } from '@/lib/api';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Button } from './button';
+import { Input } from './input';
 import { GlareCard } from './glare-card';
-import { ShimmerButton } from './shimmer-button';
 
 export function ConnectCard() {
-  const [repositories, setRepositories] = useState<RepositoryPayload[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [owner, setOwner] = useState('');
   const [name, setName] = useState('');
-  const [branch, setBranch] = useState('main');
+  const [branch, setBranch] = useState('');
   const [checkoutPath, setCheckoutPath] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [connectStage, setConnectStage] = useState<'checking' | 'cloning' | 'done' | null>(null);
@@ -25,26 +24,6 @@ export function ConnectCard() {
     message: string;
   } | null>(null);
   const [connecting, setConnecting] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api.listRepositories();
-      setRepositories(data.repositories);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => {
-      void load();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [load]);
 
   async function connect(e: React.FormEvent) {
     e.preventDefault();
@@ -66,16 +45,17 @@ export function ConnectCard() {
       setConnectStage('cloning');
       await api.createRepository({
         ...(canUseParts
-          ? { owner: owner.trim(), name: name.trim(), branch: branch.trim() || 'main' }
+          ? { owner: owner.trim(), name: name.trim(), ...(branch.trim() ? { branch: branch.trim() } : {}) }
           : { repoUrl: url }),
+        ...(branch.trim() && url ? { branch: branch.trim() } : {}),
         ...(checkoutPath.trim() ? { checkoutPath: checkoutPath.trim() } : {}),
       });
       setRepoUrl('');
       setOwner('');
       setName('');
+      setBranch('');
       setCheckoutPath('');
       setConnectStage('done');
-      await load();
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : String(e2));
     } finally {
@@ -98,7 +78,7 @@ export function ConnectCard() {
         <div className="form-row">
           <label className="form-field" style={{ flex: 2 }}>
             <span className="label">Repository URL</span>
-            <input
+            <Input
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
               placeholder="https://github.com/HeyBroooo/cognimail"
@@ -107,11 +87,11 @@ export function ConnectCard() {
           </label>
           <label className="form-field" style={{ flex: 1 }}>
             <span className="label">Branch (optional)</span>
-            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" className="connect-input" />
+            <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Use repository default" className="connect-input" />
           </label>
-          <ShimmerButton type="submit" disabled={connecting} className="connect-btn">
+          <Button type="submit" disabled={connecting} className="connect-btn">
             {connecting ? (connectStage === 'checking' ? 'Checking access…' : 'Cloning…') : 'Connect'}
-          </ShimmerButton>
+          </Button>
         </div>
         <details className="connect-details">
           <summary className="muted small connect-summary">
@@ -120,15 +100,15 @@ export function ConnectCard() {
           <div className="form-row" style={{ marginTop: 10 }}>
             <label className="form-field">
               <span className="label">Owner</span>
-              <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="acme" className="connect-input" />
+              <Input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="acme" className="connect-input" />
             </label>
             <label className="form-field">
               <span className="label">Repository</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="patient-portal" className="connect-input" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="patient-portal" className="connect-input" />
             </label>
             <label className="form-field" style={{ flex: 1 }}>
               <span className="label">Local checkout path (optional)</span>
-              <input
+              <Input
                 value={checkoutPath}
                 onChange={(e) => setCheckoutPath(e.target.value)}
                 placeholder="C:\\code\\patient-portal"

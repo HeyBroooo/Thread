@@ -26,5 +26,5 @@ export function useRepository(id: string) {
     void refresh();
   }, [refresh]);
 
-  return { repository, job, error, loading, refresh };
+  return { repository, job, error, loading, refresh, setRepository, setJob };
 }

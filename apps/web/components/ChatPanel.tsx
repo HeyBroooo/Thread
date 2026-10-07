@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MessagesSquare } from 'lucide-react';
 import { api, type ChatPayload } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const MotionButton = motion(Button);
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -120,12 +126,14 @@ export function ChatPanel({
             <div className="suggestions">
               {suggestionsLoading
                 ? [0, 1, 2].map((i) => (
-                    <span key={i} className="skeleton" style={{ width: 168, height: 30, borderRadius: 999 }} />
+                    <Skeleton key={i} style={{ width: 168, height: 30, borderRadius: 999 }} />
                   ))
                 : suggestions.map((s) => (
-                    <motion.button
+                    <MotionButton
                       key={s}
                       type="button"
+                      variant="outline"
+                      size="sm"
                       className="chip"
                       onClick={() => void send(s)}
                       whileHover={{ scale: 1.04, y: -1 }}
@@ -133,7 +141,7 @@ export function ChatPanel({
                       transition={{ duration: 0.15 }}
                     >
                       {s}
-                    </motion.button>
+                    </MotionButton>
                   ))}
             </div>
           </motion.div>
@@ -148,15 +156,17 @@ export function ChatPanel({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="bubble">
+              <div className="ui-card bubble">
                 <div className="message-text">{m.text}</div>
                 {m.payload && m.payload.references.length > 0 && (
                   <div className="references">
                     <div className="label">References</div>
                     {m.payload.references.map((r, j) => (
-                      <motion.button
+                      <MotionButton
                         key={j}
                         type="button"
+                        variant="outline"
+                        size="sm"
                         className="reference"
                         onClick={() => onViewOnCanvas?.(m.payload!)}
                         title={r.snippet}
@@ -167,7 +177,7 @@ export function ChatPanel({
                           {r.filePath}:{r.startLine}–{r.endLine}
                         </code>
                         {r.symbol ? <span className="muted"> · {r.symbol}</span> : null}
-                      </motion.button>
+                      </MotionButton>
                     ))}
                   </div>
                 )}
@@ -177,9 +187,9 @@ export function ChatPanel({
                     {m.payload.unverified && <span>· unverified</span>}
                     {m.payload.partial && <span>· partial graph</span>}
                     {m.payload.canvasPath.length > 0 && onViewOnCanvas && (
-                      <button type="button" className="link-button" onClick={() => onViewOnCanvas(m.payload!)}>
+                      <Button type="button" variant="link" size="sm" className="link-button" onClick={() => onViewOnCanvas(m.payload!)}>
                         View on Canvas →
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -190,13 +200,12 @@ export function ChatPanel({
         </AnimatePresence>
 
         {error && (
-          <motion.p
-            className="error small"
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
-            {error}
-          </motion.p>
+            <Alert variant="destructive">{error}</Alert>
+          </motion.div>
         )}
       </div>
 
@@ -207,20 +216,13 @@ export function ChatPanel({
           void send(input);
         }}
       >
-        <input
+        <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about this codebase…"
           disabled={busy}
         />
-        <motion.button
-          type="submit"
-          disabled={busy || input.trim().length === 0}
-          whileTap={{ scale: 0.96 }}
-          className="btn-primary"
-        >
-          Ask
-        </motion.button>
+        <Button type="submit" disabled={busy || input.trim().length === 0} className="btn-primary">Ask</Button>
       </form>
     </div>
   );

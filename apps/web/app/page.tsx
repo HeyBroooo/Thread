@@ -58,6 +58,17 @@ export default function LandingPage() {
   const totalEdges = repositories.reduce((acc, r) => acc + (r.latestJob?.edgesCreated ?? 0), 0);
   const totalFiles = repositories.reduce((acc, r) => acc + (r.latestJob?.filesProcessed ?? 0), 0);
 
+  async function removeRepository(id: string) {
+    const repository = repositories.find((item) => item.id === id);
+    if (!repository || !window.confirm(`Remove ${repository.owner}/${repository.name} and its indexed graph?`)) return;
+    try {
+      await api.deleteRepository(id);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not remove the repository.');
+    }
+  }
+
   return (
     <div className="landing-page">
       <LandingNav />
@@ -147,7 +158,7 @@ export default function LandingPage() {
                   >
                     <RepoCard repo={repo} onReindex={(id) => {
                       api.startIndex(id).then(() => load()).catch((e) => setError(e instanceof Error ? e.message : String(e)));
-                    }} />
+                    }} onDelete={(id) => void removeRepository(id)} />
                   </motion.div>
                 ))}
               </AnimatePresence>

@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { Button } from '@/components/ui/button';
 
 export function SessionControls() {
   const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -13,9 +15,9 @@ export function SessionControls() {
     void api.authSession()
       .then((session) => setAuthenticated(session.authenticated))
       .catch(() => setAuthenticated(false));
-  }, [pathname]);
+  }, [isLoginPage]);
 
-  if (!authenticated || pathname === '/login') return null;
+  if (!authenticated || isLoginPage) return null;
 
   async function signOut() {
     try {
@@ -28,12 +30,14 @@ export function SessionControls() {
   }
 
   return (
-    <button
+    <Button
       type="button"
       onClick={() => void signOut()}
+      variant="outline"
+      size="sm"
       style={{ position: 'fixed', top: 14, right: 16, zIndex: 100 }}
     >
       Sign out
-    </button>
+    </Button>
   );
 }

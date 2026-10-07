@@ -52,7 +52,7 @@ services:
       dockerfile: Dockerfile
       target: web
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL to the public API URL}
+        API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8787}
     restart: unless-stopped
     environment:
       NODE_ENV: production

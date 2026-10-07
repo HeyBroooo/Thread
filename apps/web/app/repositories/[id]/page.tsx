@@ -6,8 +6,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Cable, GitBranch, GitPullRequest, Map as MapIcon, MessagesSquare, Network, Package, Route, Settings } from 'lucide-react';
 import { api, type DependencyEntry, type ProjectManifest } from '@/lib/api';
-import { useRepository } from '@/lib/useRepository';
-import { RepoShell } from '@/components/RepoShell';
+import { useRepositoryContext } from '@/components/RepositoryLayout';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface ArchitecturePayload {
   counts: { nodes: number; edges: number };
@@ -118,15 +119,15 @@ function ProjectManifestCard({ manifest }: { manifest: ProjectManifest }) {
       </div>
 
       <div className="manifest-meta">
-        <span className="pill manifest-type">{manifest.projectType}</span>
-        {manifest.packageManager && <span className="pill">{manifest.packageManager}</span>}
-        {manifest.lockfile && <span className="pill">{manifest.lockfile}</span>}
-        <span className="pill">{manifest.runtime.length} runtime</span>
-        <span className="pill">{manifest.dev.length} dev</span>
+        <Badge variant="outline" className="pill manifest-type">{manifest.projectType}</Badge>
+        {manifest.packageManager && <Badge variant="outline" className="pill">{manifest.packageManager}</Badge>}
+        {manifest.lockfile && <Badge variant="outline" className="pill">{manifest.lockfile}</Badge>}
+        <Badge variant="outline" className="pill">{manifest.runtime.length} runtime</Badge>
+        <Badge variant="outline" className="pill">{manifest.dev.length} dev</Badge>
         {workspaceCount > 0 && (
-          <span className="pill">
+          <Badge variant="outline" className="pill">
             {workspaceCount} workspace{workspaceCount === 1 ? '' : 's'}
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -199,17 +200,24 @@ const rowVariants = {
 export default function RepositoryOverviewPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { repository, job, loading, refresh } = useRepository(id);
+  const { repository, job, refresh, setRepository, setJob } = useRepositoryContext();
   const [architecture, setArchitecture] = useState<ArchitecturePayload | null>(null);
+  const [architectureLoading, setArchitectureLoading] = useState(true);
+  const [architectureError, setArchitectureError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadArchitecture = useCallback(async () => {
+    setArchitectureLoading(true);
+    setArchitectureError(null);
     try {
       setArchitecture(await api.architecture(id));
-    } catch {
+    } catch (cause) {
       setArchitecture(null);
+      setArchitectureError(cause instanceof Error ? cause.message : 'Could not load repository architecture.');
+    } finally {
+      setArchitectureLoading(false);
     }
-  }, [id]);
+  }, [id, repository.branch]);
 
   useEffect(() => {
     void loadArchitecture();
@@ -218,21 +226,14 @@ export default function RepositoryOverviewPage() {
   async function startIndex(incremental = false) {
     setBusy(true);
     try {
-      await api.startIndex(id, { incremental });
+      const result = await api.startIndex(id, { incremental });
+      setRepository({ ...repository, indexStatus: 'QUEUED' });
+      setJob(result.job);
       await refresh();
       await loadArchitecture();
     } finally {
       setBusy(false);
     }
-  }
-
-  if (loading || !repository) {
-    return (
-      <div className="app">
-        <div className="skeleton" style={{ height: 16, width: '30%', marginBottom: 12 }} />
-        <div className="skeleton" style={{ height: 80, width: '100%' }} />
-      </div>
-    );
   }
 
   const running = repository.indexStatus === 'INDEXING' || repository.indexStatus === 'QUEUED';
@@ -257,7 +258,6 @@ export default function RepositoryOverviewPage() {
   const commit = architecture?.graphVersion.commit ?? repository.indexedCommitSha ?? null;
 
   return (
-    <RepoShell repository={repository}>
       <div className="section">
         <motion.div
           className="page-head"
@@ -275,42 +275,51 @@ export default function RepositoryOverviewPage() {
             </p>
           </div>
           <div className="page-actions">
-            <button
+            <Button
               type="button"
+              variant="outline"
               className="btn-outline"
               onClick={() => void startIndex(true)}
               disabled={busy || running || !repository.indexedCommitSha}
             >
               Incremental update
-            </button>
-            <button type="button" className="btn-primary" onClick={() => void startIndex(false)} disabled={busy || running}>
+            </Button>
+            <Button type="button" className="btn-primary" onClick={() => void startIndex(false)} disabled={busy || running}>
               {repository.indexedCommitSha ? 'Full reindex' : 'Start indexing'}
-            </button>
+            </Button>
           </div>
         </motion.div>
 
-        <div className="stat-grid">
-          {stats.map((s, i) => (
-            <motion.div
-              key={s.key}
-              className={i === 0 ? 'stat-tile accent' : 'stat-tile'}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.04, ease: 'easeOut' }}
-            >
-              <div className="tile-head">
-                <span className="tile-icon" aria-hidden="true">
-                  <s.icon size={16} strokeWidth={1.8} />
-                </span>
-                <span className="tile-label">{s.key}</span>
-              </div>
-              <div className="tile-value">
-                <AnimatedNumber value={s.value} />
-              </div>
-              <div className="tile-foot">{s.hint}</div>
-            </motion.div>
-          ))}
-        </div>
+        {architectureLoading ? (
+          <div className="stat-grid" aria-label="Loading repository statistics">
+            {stats.map((s) => <div className="skeleton" key={s.key} style={{ height: 105 }} />)}
+          </div>
+        ) : architectureError ? (
+          <p className="error small" role="alert">{architectureError}</p>
+        ) : (
+          <div className="stat-grid">
+            {stats.map((s, i) => (
+              <motion.div
+                key={s.key}
+                className={i === 0 ? 'stat-tile accent' : 'stat-tile'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.04, ease: 'easeOut' }}
+              >
+                <div className="tile-head">
+                  <span className="tile-icon" aria-hidden="true">
+                    <s.icon size={16} strokeWidth={1.8} />
+                  </span>
+                  <span className="tile-label">{s.key}</span>
+                </div>
+                <div className="tile-value">
+                  <AnimatedNumber value={s.value} />
+                </div>
+                <div className="tile-foot">{s.hint}</div>
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         <AnimatePresence>
           {running && job && (
@@ -355,7 +364,9 @@ export default function RepositoryOverviewPage() {
               <h2>Routes</h2>
               <span className="muted small">{architecture?.routes.length ?? 0} detected</span>
             </div>
-            {architecture && architecture.routes.length > 0 ? (
+            {architectureLoading ? (
+              <div className="skeleton" style={{ height: 90 }} />
+            ) : architecture && architecture.routes.length > 0 ? (
               <motion.ul
                 className="pr-list list-scroll"
                 variants={listVariants}
@@ -368,6 +379,8 @@ export default function RepositoryOverviewPage() {
                   </motion.li>
                 ))}
               </motion.ul>
+            ) : architectureError ? (
+              <p className="error small">{architectureError}</p>
             ) : (
               <p className="muted small">No routes detected.</p>
             )}
@@ -383,7 +396,9 @@ export default function RepositoryOverviewPage() {
               <h2>API endpoints</h2>
               <span className="muted small">{architecture?.endpoints.length ?? 0} detected</span>
             </div>
-            {architecture && architecture.endpoints.length > 0 ? (
+            {architectureLoading ? (
+              <div className="skeleton" style={{ height: 90 }} />
+            ) : architecture && architecture.endpoints.length > 0 ? (
               <motion.ul
                 className="pr-list list-scroll"
                 variants={listVariants}
@@ -400,6 +415,8 @@ export default function RepositoryOverviewPage() {
                   </motion.li>
                 ))}
               </motion.ul>
+            ) : architectureError ? (
+              <p className="error small">{architectureError}</p>
             ) : (
               <p className="muted small">No API endpoints detected.</p>
             )}
@@ -489,6 +506,5 @@ export default function RepositoryOverviewPage() {
           })}
         </motion.div>
       </div>
-    </RepoShell>
   );
 }

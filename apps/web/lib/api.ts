@@ -71,7 +71,6 @@ export interface RepositoryPayload {
   graphSchemaVersion: number | null;
   lastIndexedAt: string | null;
   error: string | null;
-  checkoutPath: string;
   latestJob?: JobPayload | null;
 }
 
@@ -129,12 +128,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
     if (
       res.status === 401 &&
-      body.error?.code === 'AUTH_REQUIRED' &&
+      (body.error?.code === 'AUTH_REQUIRED' || body.error?.code === 'ENTRY_PASSWORD_REQUIRED') &&
       typeof window !== 'undefined' &&
       window.location.pathname !== '/login'
     ) {
       const returnTo = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/login?from=${encodeURIComponent(returnTo)}`);
+      const entry = body.error?.code === 'ENTRY_PASSWORD_REQUIRED' ? '&entry=1' : '';
+      window.location.assign(`/login?from=${encodeURIComponent(returnTo)}${entry}`);
     }
     throw new Error(body.error?.message ?? `Request failed: ${res.status}`);
   }
@@ -142,11 +142,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  authSession: () => request<{ authenticated: boolean; username?: string }>('/api/auth/session'),
-  login: (username: string, password: string) =>
-    request<{ authenticated: boolean; username: string }>('/api/auth/login', {
+  authSession: () =>
+    request<{ authenticated: boolean; identityAuthenticated: boolean; email?: string }>('/api/auth/session'),
+  login: (password: string) =>
+    request<{ authenticated: boolean; username: string }>('/api/auth/entry', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ password }),
+    }),
+  requestMagicLink: (email: string, from: string) =>
+    request<{ sent: boolean }>('/api/auth/magic-link', {
+      method: 'POST',
+      body: JSON.stringify({ email, from }),
     }),
   logout: () => request<{ authenticated: false }>('/api/auth/logout', { method: 'POST' }),
   listRepositories: () => request<{ repositories: RepositoryPayload[] }>('/api/repositories'),
@@ -163,6 +169,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  switchBranch: (id: string, branch: string) =>
+    request<{ repository: RepositoryPayload; job: JobPayload }>(`/api/repositories/${id}/branch`, {
+      method: 'PATCH',
+      body: JSON.stringify({ branch }),
+    }),
+  deleteRepository: (id: string) =>
+    request<{ deleted: true }>(`/api/repositories/${id}`, { method: 'DELETE' }),
   checkAccess: (repoUrl: string) =>
     request<{
       owner: string;

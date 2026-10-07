@@ -5,6 +5,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { FolderTree, MousePointer2, Move } from 'lucide-react';
 import { api, type NodeDetailPayload } from '@/lib/api';
 import { NODE_COLORS } from './GraphCanvas';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert } from '@/components/ui/alert';
 
 const FLOW_EDGES = new Set(['CALLS', 'USES', 'RENDERS', 'CALLS_API', 'NAVIGATES_TO', 'IMPLEMENTS', 'USES_STORE', 'USES_CONTEXT']);
 
@@ -73,16 +77,18 @@ export function NodeDetails({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="skeleton" style={{ height: 18, width: '55%', marginBottom: 12 }} />
-            <div className="skeleton" style={{ height: 11, width: '80%', marginBottom: 8 }} />
-            <div className="skeleton" style={{ height: 11, width: '70%' }} />
+            <Skeleton style={{ height: 18, width: '55%', marginBottom: 12 }} />
+            <Skeleton style={{ height: 11, width: '80%', marginBottom: 8 }} />
+            <Skeleton style={{ height: 11, width: '70%' }} />
           </motion.div>
         )}
 
         {error && (
-          <motion.p key="error" className="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <Alert variant="destructive">
             {error}
-          </motion.p>
+            </Alert>
+          </motion.div>
         )}
 
         {detail && !loading && !error && (
@@ -117,12 +123,12 @@ function NodeDetailBody({
         <span className="type-dot" style={{ background: NODE_COLORS[node.nodeType] ?? '#94a3b8' }} />
         <div>
           <h3 title={node.qualifiedName}>{node.name}</h3>
-          <div className="muted small">{node.nodeType}</div>
+          <Badge variant="secondary">{node.nodeType}</Badge>
         </div>
       </header>
 
       {node.filePath && (
-        <div className="detail-block">
+        <div className="detail-block ui-card">
           <div className="label">Path</div>
           <code className="path">
             {node.filePath}
@@ -132,7 +138,7 @@ function NodeDetailBody({
       )}
 
       {Object.keys(node.metadata).length > 0 && (
-        <div className="detail-block">
+        <div className="detail-block ui-card">
           <div className="label">Properties</div>
           <ul className="kv">
             {Object.entries(node.metadata)
@@ -147,7 +153,7 @@ function NodeDetailBody({
         </div>
       )}
 
-      <div className="detail-block">
+      <div className="detail-block ui-card">
         <div className="label">Relationships ({calls.length})</div>
         {calls.length === 0 && <p className="muted small">No flow relationships recorded.</p>}
         <ul className="relationships">
@@ -159,14 +165,16 @@ function NodeDetailBody({
                 <span className={`edge-badge edge-${edge.edgeType.toLowerCase()}`}>
                   {outgoing ? '→' : '←'} {edge.edgeType}
                 </span>
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="sm"
                   className="link-button"
                   onClick={() => onFocusNode?.(otherId)}
                   title={edge.evidence}
                 >
                   {otherId === node.id ? node.name : otherId}
-                </button>
+                </Button>
                 <span className="muted small confidence">{Math.round(edge.confidence * 100)}%</span>
                 {edge.sourceFile && (
                   <div className="evidence-line">
@@ -184,7 +192,7 @@ function NodeDetailBody({
       </div>
 
       {detail.evidence && (
-        <div className="detail-block">
+        <div className="detail-block ui-card">
           <div className="label">
             Source —{' '}
             <code>

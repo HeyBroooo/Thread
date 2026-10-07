@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { StatusPill } from '@/components/RepoShell';
 import { GlareCard } from './glare-card';
+import { Button } from './button';
 
 interface RepoCardProps {
   repo: {
@@ -24,9 +25,10 @@ interface RepoCardProps {
     } | null;
   };
   onReindex: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-export function RepoCard({ repo, onReindex }: RepoCardProps) {
+export function RepoCard({ repo, onReindex, onDelete }: RepoCardProps) {
   const job = repo.latestJob;
   const running = repo.indexStatus === 'INDEXING' || repo.indexStatus === 'QUEUED';
 
@@ -60,15 +62,18 @@ export function RepoCard({ repo, onReindex }: RepoCardProps) {
         )}
       </div>
       <div className="repo-card-actions">
-        <button type="button" onClick={() => onReindex(repo.id)} disabled={running}>
+        <Button type="button" onClick={() => onReindex(repo.id)} disabled={running} size="sm">
           {repo.indexedCommitSha ? 'Re-index' : 'Index'}
-        </button>
+        </Button>
         <Link href={`/repositories/${repo.id}/canvas`}>
-          <span className="btn-outline repo-card-link-btn">Canvas</span>
+          <span className="ui-button ui-button-outline ui-button-sm repo-card-link-btn">Canvas</span>
         </Link>
         <Link href={`/repositories/${repo.id}/chat`}>
-          <span className="btn-outline repo-card-link-btn">Chat</span>
+          <span className="ui-button ui-button-outline ui-button-sm repo-card-link-btn">Chat</span>
         </Link>
+        <Button type="button" variant="destructive" size="sm" className="repo-card-link-btn" onClick={() => onDelete(repo.id)}>
+          Remove
+        </Button>
       </div>
     </GlareCard>
   );

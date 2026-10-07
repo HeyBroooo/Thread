@@ -169,6 +169,9 @@ export async function cloneOrPull(options: {
 
   // An explicit local checkout always wins — never clone over real files.
   if (options.existingPath && existsSync(options.existingPath)) {
+    if (requestedBranch) {
+      await checkoutRequestedBranch(options.existingPath, requestedBranch, token);
+    }
     const sha = await git(['rev-parse', 'HEAD'], options.existingPath, token).catch(() => '');
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD'], options.existingPath, token).catch(() => 'HEAD');
     return { checkoutPath: options.existingPath, branch: branch.trim() || 'HEAD', commitSha: sha.trim(), reused: true };
@@ -204,16 +207,50 @@ export async function cloneOrPull(options: {
       throw new AppError('CLONE_FAILED', `Cloning ${owner}/${name} failed: ${message.slice(0, 300)}`, 502);
     }
   } else {
-    await git(['fetch', '--all', '--prune', '--tags'], dir, token).catch(() => undefined);
     if (requestedBranch) {
-      await git(['checkout', requestedBranch], dir, token).catch(() => undefined);
-      await git(['pull', '--ff-only', 'origin', requestedBranch], dir, token).catch(() => undefined);
+      await checkoutRequestedBranch(dir, requestedBranch, token);
     } else {
-      await git(['pull', '--ff-only'], dir, token).catch(() => undefined);
+      await git(['fetch', '--all', '--prune', '--tags'], dir, token);
+      await git(['pull', '--ff-only'], dir, token);
     }
   }
 
   const branch = (await git(['rev-parse', '--abbrev-ref', 'HEAD'], dir, token).catch(() => 'HEAD')).trim() || 'HEAD';
   const commitSha = (await git(['rev-parse', 'HEAD'], dir, token).catch(() => '')).trim();
   return { checkoutPath: dir, branch, commitSha, reused: !isClone };
+}
+
+async function checkoutRequestedBranch(dir: string, branch: string, token?: string): Promise<void> {
+  try {
+    await git(['check-ref-format', '--branch', branch], dir, token);
+  } catch {
+    throw new AppError('INVALID_BRANCH', `Branch name "${branch}" is not valid.`, 400);
+  }
+  try {
+    await git(['fetch', '--prune', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], dir, token);
+    const remoteRef = `refs/remotes/origin/${branch}`;
+    try {
+      await git(['show-ref', '--verify', '--quiet', remoteRef], dir, token);
+    } catch {
+      throw new AppError('BRANCH_NOT_FOUND', `Branch "${branch}" was not found in the repository.`, 400);
+    }
+    const localRef = `refs/heads/${branch}`;
+    const localExists = await git(['show-ref', '--verify', '--quiet', localRef], dir, token).then(
+      () => true,
+      () => false,
+    );
+    if (localExists) {
+      await git(['checkout', branch], dir, token);
+    } else {
+      await git(['checkout', '--track', '-b', branch, `origin/${branch}`], dir, token);
+    }
+    await git(['pull', '--ff-only', 'origin', branch], dir, token);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    if (/couldn't find remote ref|could not find remote|not a valid ref|does not exist/i.test(message)) {
+      throw new AppError('BRANCH_NOT_FOUND', `Branch "${branch}" was not found in the repository.`, 400);
+    }
+    throw new AppError('BRANCH_CHECKOUT_FAILED', `Could not switch checkout to branch "${branch}": ${message.slice(0, 240)}`, 400);
+  }
 }

@@ -5,8 +5,10 @@ import { motion } from 'framer-motion';
 import { ExternalLink, MessageSquare } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { API_URL } from '@/lib/api';
-import { useRepository } from '@/lib/useRepository';
-import { RepoShell } from '@/components/RepoShell';
+import { useRepositoryContext } from '@/components/RepositoryLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
 interface ReviewSummary {
   id: string;
@@ -127,12 +129,13 @@ function reviewBadge(review: ReviewSummary | null | undefined, jobActive: boolea
 export default function PullRequestsPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { repository, loading } = useRepository(id);
+  const { repository } = useRepositoryContext();
   const [pullRequests, setPullRequests] = useState<PullRequestRow[]>([]);
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [capability, setCapability] = useState<CommentCapability | null>(null);
   const [jobs, setJobs] = useState<ReviewJobRow[]>([]);
   const [active, setActive] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyPr, setBusyPr] = useState<number | null>(null);
   const [tokenInput, setTokenInput] = useState('');
@@ -169,6 +172,8 @@ export default function PullRequestsPage() {
         await Promise.all([loadPrs(), loadFindings(), loadReviews()]);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setInitialLoading(false);
       }
     };
     void boot();
@@ -205,6 +210,18 @@ export default function PullRequestsPage() {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [active, loadReviews, loadPrs, loadFindings]);
+
+  if (initialLoading) {
+    return (
+      <div className="section" aria-label="Loading pull requests">
+        <div className="skeleton" style={{ height: 30, width: 220, marginBottom: 14 }} />
+        <div className="skeleton" style={{ height: 100, marginBottom: 16 }} />
+        {[0, 1, 2].map((item) => (
+          <div className="skeleton" key={item} style={{ height: 78, marginBottom: 10 }} />
+        ))}
+      </div>
+    );
+  }
 
   /** Save or clear the personal access token the service posts comments with. */
   async function persistToken(value: string) {
@@ -261,15 +278,6 @@ export default function PullRequestsPage() {
     }
   }
 
-  if (loading || !repository) {
-    return (
-      <div className="app">
-        <div className="skeleton" style={{ height: 16, width: '30%', marginBottom: 12 }} />
-        <div className="skeleton" style={{ height: 120, width: '100%' }} />
-      </div>
-    );
-  }
-
   const severityCounts = findings.reduce<Record<string, number>>((acc, f) => {
     acc[f.severity.toLowerCase()] = (acc[f.severity.toLowerCase()] ?? 0) + 1;
     return acc;
@@ -279,7 +287,6 @@ export default function PullRequestsPage() {
     jobs.find((j) => j.number === pr.number && (j.status === 'QUEUED' || j.status === 'RUNNING'));
 
   return (
-    <RepoShell repository={repository}>
       <div className="section">
         <motion.div
           className="page-head"
@@ -295,13 +302,14 @@ export default function PullRequestsPage() {
             </p>
           </div>
           <div className="page-actions">
-            <button
+            <Button
               type="button"
+              variant="outline"
               className="btn-outline"
               onClick={() => void loadPrs().catch((e) => setError(String(e)))}
             >
               Refresh
-            </button>
+            </Button>
           </div>
         </motion.div>
 
@@ -391,7 +399,7 @@ export default function PullRequestsPage() {
                 borderTop: '1px solid var(--border, rgba(255,255,255,0.08))',
               }}
             >
-              <input
+              <Input
                 type="password"
                 placeholder="github_pat_… or ghp_… (repo scope)"
                 value={tokenInput}
@@ -400,18 +408,18 @@ export default function PullRequestsPage() {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <button
+              <Button
                 type="button"
                 className="btn-primary"
                 disabled={tokenBusy || tokenInput.trim().length === 0}
                 onClick={() => void persistToken(tokenInput)}
               >
                 {tokenBusy ? 'Saving…' : 'Save token'}
-              </button>
+              </Button>
               {capability.tokenSource === 'runtime' && (
-                <button type="button" className="link-button" disabled={tokenBusy} onClick={() => void persistToken('')}>
+                <Button type="button" variant="link" className="link-button" disabled={tokenBusy} onClick={() => void persistToken('')}>
                   Remove saved token
-                </button>
+                </Button>
               )}
             </div>
             <p className="muted small" style={{ marginTop: 8, lineHeight: 1.6 }}>
@@ -436,7 +444,7 @@ export default function PullRequestsPage() {
         >
           <div className="card-header">
             <h2>Tracked pull requests</h2>
-            <span className="pill">{pullRequests.length}</span>
+            <Badge variant="secondary" className="pill">{pullRequests.length}</Badge>
           </div>
           {error && <p className="error small">{error}</p>}
           {pullRequests.length === 0 ? (
@@ -466,8 +474,8 @@ export default function PullRequestsPage() {
                         <span>{pr.title}</span>
                       )}
                       <span className={badge.cls}>{badge.label}</span>
-                      {pr.state && pr.state !== 'open' && <span className="pill">{pr.state}</span>}
-                      {pr.draft && <span className="pill">draft</span>}
+                      {pr.state && pr.state !== 'open' && <Badge variant="outline" className="pill">{pr.state}</Badge>}
+                      {pr.draft && <Badge variant="secondary" className="pill">draft</Badge>}
                       {commentUrl && (
                         <a
                           className="pill severity-low review-comment-link"
@@ -481,10 +489,10 @@ export default function PullRequestsPage() {
                         </a>
                       )}
                       {commentBlocked && (
-                        <span className="pill severity-medium">
+                        <Badge variant="outline" className="pill severity-medium">
                           <MessageSquare size={12} aria-hidden="true" />
                           {commentUrl ? 'Update failed' : 'Not posted'}
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <div
@@ -504,7 +512,7 @@ export default function PullRequestsPage() {
                         <span>ai: {pr.review.aiStatus}</span>
                       )}
                       {pr.review?.error && <span className="error small">{pr.review.error}</span>}
-                      <button
+                      <Button
                         type="button"
                         onClick={() => void reviewNow(pr, Boolean(commentUrl))}
                         disabled={jobActive || busyPr === pr.number}
@@ -518,7 +526,7 @@ export default function PullRequestsPage() {
                             : commentUrl
                               ? 'Post new comment'
                               : 'Review now'}
-                      </button>
+                      </Button>
                     </div>
                   </motion.li>
                 );
@@ -587,6 +595,5 @@ export default function PullRequestsPage() {
           )}
         </motion.div>
       </div>
-    </RepoShell>
   );
 }

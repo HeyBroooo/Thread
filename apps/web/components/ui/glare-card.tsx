@@ -10,7 +10,7 @@ export const GlareCard = forwardRef<
   return (
     <motion.div
       ref={ref}
-      className={`glare-card ${className}`.trim()}
+      className={`ui-card glare-card ${className}`.trim()}
       whileHover={hover ? { y: -2 } : undefined}
       transition={{ duration: 0.18, ease: 'easeOut' }}
       {...props}

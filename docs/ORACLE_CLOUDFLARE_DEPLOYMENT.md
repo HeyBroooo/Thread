@@ -86,7 +86,7 @@ Edit `deploy/oracle.env` and set:
 | `POSTGRES_PASSWORD` | A strong random alphanumeric password; the Compose URL uses it directly |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Token for the named Cloudflare Tunnel |
 | `APP_URL` | `https://app.example.com` |
-| `NEXT_PUBLIC_API_URL` | `https://api.example.com` |
+| `API_PROXY_TARGET` | `http://api:8787` for the web container's server-side rewrite |
 | `GITHUB_APP_ID` | GitHub App ID |
 | `GITHUB_PRIVATE_KEY` | PEM private key on one line with literal `\n` between lines |
 | `GITHUB_WEBHOOK_SECRET` | Secret configured in GitHub App settings |
@@ -95,6 +95,14 @@ Edit `deploy/oracle.env` and set:
 `GITHUB_TOKEN` is optional. Keep `deploy/oracle.env` only on the VM; the
 Docker build excludes it, and it must not be committed or pasted into chat.
 The public logo in GitHub review comments is served from `APP_URL`.
+This Oracle-specific stack does not configure identity-provider secrets.
+For the supported Vercel + Render auth deployment, put Supabase service-role,
+Resend, workspace-password, and session-signing secrets on the Render API
+service; do not add them to this Oracle environment file. The browser uses
+same-origin `/api/*` URLs; the web server proxies them over the Compose
+network, so the API origin is not exposed to browser JavaScript. Data delivered
+to an interactive browser remains visible to that browser by design; only
+credentials and server-only configuration stay on the server.
 
 ## 5. Start the complete stack
 

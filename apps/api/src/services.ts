@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { CodebaseChat, OpenRouterProvider, type AIProvider } from '@cbi/ai';
 import { PgGraphStore, InMemoryGraphStore, getGraphStore, type GraphStore } from '@cbi/graph';
 import { SearchService } from '@cbi/search';
-import { DiskSourceRegistry, getConfig, uuid, type IndexStatus, type SourceRegistry } from '@cbi/shared';
+import { DiskSourceRegistry, Errors, getConfig, uuid, type IndexStatus, type SourceRegistry } from '@cbi/shared';
 import * as db from '@cbi/db';
 import { readState, writeState } from './state.js';
 
@@ -204,6 +204,33 @@ export async function updateRepo(
   const record = memoryRepos.get(id);
   if (!record) return;
   Object.assign(record, patch);
+  persistRepos();
+}
+
+export async function updateRepoBranch(id: string, organizationId: string, branch: string): Promise<void> {
+  if (usingDatabase()) {
+    if (!(await db.updateRepositoryBranch(id, await resolveOrganizationId(organizationId), branch))) {
+      throw Errors.repositoryNotFound(id);
+    }
+    return;
+  }
+  const record = memoryRepos.get(id);
+  if (!record || record.organizationId !== organizationId) throw Errors.repositoryNotFound(id);
+  record.branch = branch;
+  record.defaultBranch = branch;
+  persistRepos();
+}
+
+export async function deleteRepo(id: string, organizationId: string): Promise<void> {
+  if (usingDatabase()) {
+    if (!(await db.deleteRepository(id, await resolveOrganizationId(organizationId)))) {
+      throw Errors.repositoryNotFound(id);
+    }
+    return;
+  }
+  const record = memoryRepos.get(id);
+  if (!record || record.organizationId !== organizationId) throw Errors.repositoryNotFound(id);
+  memoryRepos.delete(id);
   persistRepos();
 }
 

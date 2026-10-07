@@ -106,6 +106,23 @@ export async function listRepositories(organizationId: string): Promise<Reposito
   );
 }
 
+export async function updateRepositoryBranch(id: string, organizationId: string, branch: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE repositories SET branch = $3, default_branch = $3, updated_at = now()
+     WHERE id = $1 AND organization_id = $2 RETURNING id`,
+    [id, organizationId, branch],
+  );
+  return rows.length === 1;
+}
+
+export async function deleteRepository(id: string, organizationId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>('DELETE FROM repositories WHERE id = $1 AND organization_id = $2 RETURNING id', [
+    id,
+    organizationId,
+  ]);
+  return rows.length === 1;
+}
+
 export async function listRepositoriesByInstallation(installationId: string): Promise<RepositoryRow[]> {
   return query<RepositoryRow>('SELECT * FROM repositories WHERE github_installation_id = $1', [installationId]);
 }

@@ -21,6 +21,9 @@
     "@cbi/search": "*",
     "@cbi/shared": "*",
     "@hono/node-server": "^1.13.7",
-    "hono": "^4.6.14"
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
+    "hono": "^4.6.14",
+    "react": "^19.3.0"
   }
 }
