@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, type JobPayload, type RepositoryPayload } from '@/lib/api';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const TABS = [
   { key: '', label: 'Overview' },
@@ -58,61 +59,83 @@ export function RepoShell({
       <header className="repo-header">
         <div className="repo-header-inner">
           <div className="repo-title">
-            <Link href="/" className="back-link" title="Back to repositories" aria-label="Back to repositories">
-              <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-            </Link>
-            <strong>
+            <Button
+              asChild
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+            >
+              <Link href="/" aria-label="Back to repositories" title="Back to repositories">
+                <ArrowLeft aria-hidden="true" />
+              </Link>
+            </Button>
+            <strong className="max-w-[34vw] truncate text-sm font-semibold">
               {repository.owner}/{repository.name}
             </strong>
-            <form className="branch-switcher" onSubmit={switchBranch}>
+            <form className="flex items-center gap-2" onSubmit={switchBranch}>
               <label className="sr-only" htmlFor="active-branch">Active branch</label>
               <Input
                 id="active-branch"
                 aria-label="Active branch"
+                className="h-8 w-40"
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
                 maxLength={255}
               />
-              <Button type="submit" size="sm" variant="outline" disabled={switching || !branch.trim() || branch.trim() === repository.branch}>
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={switching || !branch.trim() || branch.trim() === repository.branch}
+              >
                 {switching ? 'Switching…' : 'Switch'}
               </Button>
             </form>
             <StatusPill status={repository.indexStatus} />
           </div>
-          <nav className="tabs">
+          <nav className="flex items-center gap-1 rounded-lg border border-border bg-muted p-1">
             {TABS.map((tab) => {
               const href = tab.key ? `${base}/${tab.key}` : base;
               const active = pathname === href;
               return (
-                <Link key={tab.key} href={href} className={active ? 'tab active' : 'tab'}>
-                  {active && (
-                    <motion.span
-                      className="tab-indicator"
-                      layoutId="tab-indicator"
-                      transition={{ type: 'spring', stiffness: 480, damping: 38 }}
-                    />
+                <Link
+                  key={tab.key}
+                  href={href}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-background hover:text-foreground',
                   )}
+                >
                   {tab.label}
                 </Link>
               );
             })}
           </nav>
         </div>
-        {branchError && <p className="error small branch-error" role="alert">{branchError}</p>}
+        {branchError && (
+          <Alert variant="destructive" className="mx-auto mt-2 max-w-[1440px]">
+            <AlertDescription>{branchError}</AlertDescription>
+          </Alert>
+        )}
       </header>
       <main className="repo-main">{children}</main>
     </div>
   );
 }
 
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  READY: 'success',
+  FAILED: 'destructive',
+  STALE: 'warning',
+};
+
 export function StatusPill({ status }: { status: string }) {
-  const cls =
-    status === 'READY'
-      ? 'status-ready'
-      : status === 'FAILED'
-        ? 'status-failed'
-        : status === 'STALE'
-          ? 'status-stale'
-          : 'status-running';
-  return <Badge variant="secondary" className={`pill ${cls}`}>{status}</Badge>;
+  return (
+    <Badge variant={STATUS_VARIANTS[status] ?? 'secondary'} className="repo-status-pill">
+      {status}
+    </Badge>
+  );
 }

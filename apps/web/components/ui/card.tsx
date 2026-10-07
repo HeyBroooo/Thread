@@ -1,29 +1,46 @@
-import { forwardRef, type HTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+import type { HTMLAttributes } from 'react';
+import { cn } from '@/lib/utils';
 
-export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function Card(
-  { className, ...props },
-  ref,
-) {
-  return <div ref={ref} className={cn('ui-card', className)} {...props} />;
-});
+export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      data-slot="card"
+      className={cn('ui-card bg-card text-card-foreground flex flex-col rounded-xl border border-border shadow-sm', className)}
+      {...props}
+    />
+  );
+}
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('ui-card-header', className)} {...props} />;
+  return <div data-slot="card-header" className={cn('ui-card-header flex flex-col gap-1.5 p-6', className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn('ui-card-title', className)} {...props} />;
+  return (
+    <h3
+      data-slot="card-title"
+      className={cn('ui-card-title text-base font-semibold leading-none tracking-tight', className)}
+      {...props}
+    />
+  );
 }
 
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('ui-card-description', className)} {...props} />;
+  return (
+    <p
+      data-slot="card-description"
+      className={cn('ui-card-description text-muted-foreground text-sm', className)}
+      {...props}
+    />
+  );
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('ui-card-content', className)} {...props} />;
+  return <div data-slot="card-content" className={cn('ui-card-content p-6 pt-0', className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('ui-card-footer', className)} {...props} />;
+  return (
+    <div data-slot="card-footer" className={cn('ui-card-footer flex items-center p-6 pt-0', className)} {...props} />
+  );
 }

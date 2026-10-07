@@ -1,0 +1,88 @@
+/* ---------------------------------------------------------------------------
+   Tailwind CSS v4 + shadcn/ui foundation.
+
+   This file is imported AFTER `globals.css` in the root layout, so its
+   utilities win same-specificity ties against the app's original stylesheet
+   while the login page's more specific rules keep working unchanged.
+   Preflight is intentionally omitted.
+--------------------------------------------------------------------------- */
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities.css';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Tailwind v4 defaults border-color to `currentColor` once preflight is
+   skipped; restore a neutral default. Any element/class rule that sets its own
+   border color still wins on specificity. */
+*,
+::after,
+::before,
+::backdrop,
+::file-selector-button {
+  border-color: var(--sh-border);
+}
+
+/* The legacy stylesheet defines a `.flex` helper that also centers items. Since
+   Tailwind's `.flex` utility only sets `display`, reset the extra property so
+   column layouts behave as expected. */
+.flex {
+  align-items: stretch;
+}
+
+/* Keep the app's own tokens authoritative over Tailwind's theme defaults. */
+:root {
+  --font-sans: 'Aptos', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --radius: 6px;
+  --radius-lg: 8px;
+
+  /* shadcn/ui semantic tokens mapped from the app palette. Namespaced with
+     `--sh-` so they never overwrite a legacy variable. */
+  --sh-background: var(--bg);
+  --sh-foreground: var(--text);
+  --sh-card: #ffffff;
+  --sh-card-foreground: var(--text);
+  --sh-popover: #ffffff;
+  --sh-popover-foreground: var(--text);
+  --sh-primary: var(--accent);
+  --sh-primary-foreground: #ffffff;
+  --sh-secondary: #eef3ef;
+  --sh-secondary-foreground: var(--text);
+  --sh-muted: #f3f6f3;
+  --sh-muted-foreground: var(--text-muted);
+  --sh-accent: #e4f1e9;
+  --sh-accent-foreground: #245c43;
+  --sh-destructive: #c4423c;
+  --sh-destructive-foreground: #ffffff;
+  --sh-border: #dfe6e0;
+  --sh-input: #dfe6e0;
+  --sh-ring: rgba(47, 118, 89, 0.45);
+}
+
+@theme inline {
+  --color-background: var(--sh-background);
+  --color-foreground: var(--sh-foreground);
+  --color-card: var(--sh-card);
+  --color-card-foreground: var(--sh-card-foreground);
+  --color-popover: var(--sh-popover);
+  --color-popover-foreground: var(--sh-popover-foreground);
+  --color-primary: var(--sh-primary);
+  --color-primary-foreground: var(--sh-primary-foreground);
+  --color-secondary: var(--sh-secondary);
+  --color-secondary-foreground: var(--sh-secondary-foreground);
+  --color-muted: var(--sh-muted);
+  --color-muted-foreground: var(--sh-muted-foreground);
+  --color-accent: var(--sh-accent);
+  --color-accent-foreground: var(--sh-accent-foreground);
+  --color-destructive: var(--sh-destructive);
+  --color-destructive-foreground: var(--sh-destructive-foreground);
+  --color-border: var(--sh-border);
+  --color-input: var(--sh-input);
+  --color-ring: var(--sh-ring);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: calc(var(--radius-lg) + 6px);
+}

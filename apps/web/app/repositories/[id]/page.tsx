@@ -9,6 +9,10 @@ import { api, type DependencyEntry, type ProjectManifest } from '@/lib/api';
 import { useRepositoryContext } from '@/components/RepositoryLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ArchitecturePayload {
   counts: { nodes: number; edges: number };
@@ -292,10 +296,12 @@ export default function RepositoryOverviewPage() {
 
         {architectureLoading ? (
           <div className="stat-grid" aria-label="Loading repository statistics">
-            {stats.map((s) => <div className="skeleton" key={s.key} style={{ height: 105 }} />)}
+            {stats.map((s) => <Skeleton key={s.key} className="h-24" />)}
           </div>
         ) : architectureError ? (
-          <p className="error small" role="alert">{architectureError}</p>
+          <Alert variant="destructive">
+            <AlertDescription>{architectureError}</AlertDescription>
+          </Alert>
         ) : (
           <div className="stat-grid">
             {stats.map((s, i) => (
@@ -324,29 +330,34 @@ export default function RepositoryOverviewPage() {
         <AnimatePresence>
           {running && job && (
             <motion.div
-              className="card"
               style={{ marginTop: 18 }}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="card-header">
-                <h2>Indexing</h2>
-                <span className="muted small">
-                  {job.stage} · {job.progress}%
-                </span>
-              </div>
-              <div className="progress">
-                <div style={{ width: `${job.progress}%` }} />
-              </div>
-              <div className="muted small">
-                {job.filesTotal > 0 ? `${job.filesProcessed}/${job.filesTotal} files processed` : 'Walking the repository…'}
-              </div>
+              <Card>
+                <CardHeader className="flex-row items-center justify-between">
+                  <CardTitle>Indexing</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {job.stage} · {job.progress}%
+                  </span>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Progress value={job.progress} />
+                  <p className="text-xs text-muted-foreground">
+                    {job.filesTotal > 0 ? `${job.filesProcessed}/${job.filesTotal} files processed` : 'Walking the repository…'}
+                  </p>
+                </CardContent>
+              </Card>
             </motion.div>
           )}
         </AnimatePresence>
-        {repository.error && <p className="error small">{repository.error}</p>}
+        {repository.error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{repository.error}</AlertDescription>
+          </Alert>
+        )}
 
         <div className="section-label">
           <h2>Architecture</h2>
@@ -355,17 +366,18 @@ export default function RepositoryOverviewPage() {
 
         <div className="grid grid-2">
           <motion.div
-            className="card"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.08, ease: 'easeOut' }}
           >
-            <div className="card-header">
-              <h2>Routes</h2>
-              <span className="muted small">{architecture?.routes.length ?? 0} detected</span>
-            </div>
+            <Card className="h-full">
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>Routes</CardTitle>
+              <span className="text-xs text-muted-foreground">{architecture?.routes.length ?? 0} detected</span>
+            </CardHeader>
+            <CardContent>
             {architectureLoading ? (
-              <div className="skeleton" style={{ height: 90 }} />
+              <Skeleton className="h-24" />
             ) : architecture && architecture.routes.length > 0 ? (
               <motion.ul
                 className="pr-list list-scroll"
@@ -380,24 +392,27 @@ export default function RepositoryOverviewPage() {
                 ))}
               </motion.ul>
             ) : architectureError ? (
-              <p className="error small">{architectureError}</p>
+              <Alert variant="destructive"><AlertDescription>{architectureError}</AlertDescription></Alert>
             ) : (
-              <p className="muted small">No routes detected.</p>
+              <p className="text-xs text-muted-foreground">No routes detected.</p>
             )}
+            </CardContent>
+            </Card>
           </motion.div>
 
           <motion.div
-            className="card"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.14, ease: 'easeOut' }}
           >
-            <div className="card-header">
-              <h2>API endpoints</h2>
-              <span className="muted small">{architecture?.endpoints.length ?? 0} detected</span>
-            </div>
+            <Card className="h-full">
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>API endpoints</CardTitle>
+              <span className="text-xs text-muted-foreground">{architecture?.endpoints.length ?? 0} detected</span>
+            </CardHeader>
+            <CardContent>
             {architectureLoading ? (
-              <div className="skeleton" style={{ height: 90 }} />
+              <Skeleton className="h-24" />
             ) : architecture && architecture.endpoints.length > 0 ? (
               <motion.ul
                 className="pr-list list-scroll"
@@ -416,37 +431,43 @@ export default function RepositoryOverviewPage() {
                 ))}
               </motion.ul>
             ) : architectureError ? (
-              <p className="error small">{architectureError}</p>
+              <Alert variant="destructive"><AlertDescription>{architectureError}</AlertDescription></Alert>
             ) : (
-              <p className="muted small">No API endpoints detected.</p>
+              <p className="text-xs text-muted-foreground">No API endpoints detected.</p>
             )}
+            </CardContent>
+            </Card>
           </motion.div>
         </div>
 
         {architecture && manifest && (
           <motion.div
-            className="card"
             style={{ marginTop: 18 }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2, ease: 'easeOut' }}
           >
-            <ProjectManifestCard manifest={manifest} />
+            <Card>
+              <CardContent className="pt-6">
+                <ProjectManifestCard manifest={manifest} />
+              </CardContent>
+            </Card>
           </motion.div>
         )}
 
         {architecture && architecture.services.length > 0 && (
           <motion.div
-            className="card"
             style={{ marginTop: 18 }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.24, ease: 'easeOut' }}
           >
-            <div className="card-header">
-              <h2>Services</h2>
-              <span className="muted small">{architecture.services.length} domain modules</span>
-            </div>
+            <Card>
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>Services</CardTitle>
+              <span className="text-xs text-muted-foreground">{architecture.services.length} domain modules</span>
+            </CardHeader>
+            <CardContent>
             <motion.ul className="pr-list list-scroll" variants={listVariants} initial="hidden" animate="show">
               {architecture.services.slice(0, 16).map((s) => (
                 <motion.li key={s.name} variants={rowVariants}>
@@ -459,6 +480,8 @@ export default function RepositoryOverviewPage() {
                 </motion.li>
               ))}
             </motion.ul>
+            </CardContent>
+            </Card>
           </motion.div>
         )}
 

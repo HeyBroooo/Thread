@@ -1,5 +1,5 @@
 import type { Finding, IndexStatus, Severity } from '@cbi/shared';
-import { query, queryOne } from './pool.js';
+import { query, queryOne, withTransaction, type PoolClient } from './pool.js';
 
 export interface OrganizationRow {
   id: string;
@@ -115,12 +115,81 @@ export async function updateRepositoryBranch(id: string, organizationId: string,
   return rows.length === 1;
 }
 
+/**
+ * Whether a column exists and can hold NULL. Returns null when the column is
+ * absent, so callers can skip a table that an older database never created.
+ */
+async function referenceColumn(table: string, column: string): Promise<boolean | null> {
+  const row = await queryOne<{ is_nullable: string }>(
+    `SELECT is_nullable FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+    [table, column],
+  );
+  if (!row) return null;
+  return row.is_nullable === 'YES';
+}
+
+/**
+ * Remove a repository together with every row that belongs to it.
+ *
+ * Child tables declare ON DELETE CASCADE, but production databases can carry
+ * constraints that predate that (or that never had it). Deleting the children
+ * explicitly inside one transaction keeps removal atomic and correct on either
+ * shape: audit/history rows that reference the repository are detached first,
+ * then the repository row itself. Without this, a single leftover reference
+ * turns the whole request into an opaque 500 and leaves a half-deleted repo.
+ */
 export async function deleteRepository(id: string, organizationId: string): Promise<boolean> {
-  const rows = await query<{ id: string }>('DELETE FROM repositories WHERE id = $1 AND organization_id = $2 RETURNING id', [
-    id,
-    organizationId,
-  ]);
-  return rows.length === 1;
+  const auditNullable = await referenceColumn('audit_logs', 'repository_id');
+  const webhookNullable = await referenceColumn('webhook_deliveries', 'repository_id');
+
+  return withTransaction(async (client: PoolClient) => {
+    await detachHistory(client, 'audit_logs', auditNullable, id);
+    await detachHistory(client, 'webhook_deliveries', webhookNullable, id);
+
+    // Delete children in dependency order so the statement works even when the
+    // database's foreign keys are NOT ON DELETE CASCADE.
+    await client.query(
+      'DELETE FROM finding_feedback WHERE finding_id IN (SELECT id FROM findings WHERE repository_id = $1)',
+      [id],
+    );
+    await client.query('DELETE FROM findings WHERE repository_id = $1', [id]);
+    await client.query(
+      'DELETE FROM pr_reviews WHERE pull_request_id IN (SELECT id FROM pull_requests WHERE repository_id = $1)',
+      [id],
+    );
+    await client.query('DELETE FROM pull_requests WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM embeddings WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM source_documents WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM graph_edges WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM graph_nodes WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM indexing_jobs WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM git_commits WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM file_history WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM repository_configs WHERE repository_id = $1', [id]);
+    await client.query('DELETE FROM project_conventions WHERE repository_id = $1', [id]);
+
+    const res = await client.query<{ id: string }>(
+      'DELETE FROM repositories WHERE id = $1 AND organization_id = $2 RETURNING id',
+      [id, organizationId],
+    );
+    return res.rowCount === 1;
+  });
+}
+
+/** Detach (or drop) history rows that point at a repository being removed. */
+async function detachHistory(
+  client: PoolClient,
+  table: 'audit_logs' | 'webhook_deliveries',
+  nullable: boolean | null,
+  repositoryId: string,
+): Promise<void> {
+  if (nullable === null) return; // table/column not present in this database
+  if (nullable) {
+    await client.query(`UPDATE ${table} SET repository_id = NULL WHERE repository_id = $1`, [repositoryId]);
+  } else {
+    await client.query(`DELETE FROM ${table} WHERE repository_id = $1`, [repositoryId]);
+  }
 }
 
 export async function listRepositoriesByInstallation(installationId: string): Promise<RepositoryRow[]> {

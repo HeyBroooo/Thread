@@ -19,6 +19,19 @@ import { ConnectCard } from '@/components/ui/connect-card';
 import { FeatureCard } from '@/components/ui/feature-card';
 import { RepoCard } from '@/components/ui/repo-card';
 import { StepItem } from '@/components/ui/step-item';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const container = {
   hidden: {},
@@ -33,6 +46,8 @@ export default function LandingPage() {
   const [repositories, setRepositories] = useState<RepositoryPayload[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<RepositoryPayload | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -58,14 +73,24 @@ export default function LandingPage() {
   const totalEdges = repositories.reduce((acc, r) => acc + (r.latestJob?.edgesCreated ?? 0), 0);
   const totalFiles = repositories.reduce((acc, r) => acc + (r.latestJob?.filesProcessed ?? 0), 0);
 
-  async function removeRepository(id: string) {
+  /** Open the confirmation dialog; the destructive call happens in confirmDelete. */
+  function requestDelete(id: string) {
     const repository = repositories.find((item) => item.id === id);
-    if (!repository || !window.confirm(`Remove ${repository.owner}/${repository.name} and its indexed graph?`)) return;
+    if (repository) setPendingDelete(repository);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await api.deleteRepository(id);
+      await api.deleteRepository(pendingDelete.id);
+      setPendingDelete(null);
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not remove the repository.');
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -88,16 +113,15 @@ export default function LandingPage() {
 
       <main className="app" style={{ paddingTop: 48 }}>
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card"
-            style={{ borderColor: 'rgba(239,68,68,0.4)' }}
-          >
-            <p className="error">{error}</p>
-            <p className="muted small">
-              Ensure the API is running and the Vercel API proxy target is configured correctly.
-            </p>
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+            <Alert variant="destructive">
+              <AlertDescription>
+                {error}
+                <span className="mt-1 block text-xs opacity-80">
+                  Ensure the API is running and the API proxy target is configured correctly.
+                </span>
+              </AlertDescription>
+            </Alert>
           </motion.div>
         )}
 
@@ -119,24 +143,25 @@ export default function LandingPage() {
           </div>
 
           {loading && repositories.length === 0 ? (
-            <div className="card">
-              <div className="skeleton" style={{ height: 14, width: '40%', marginBottom: 10 }} />
-              <div className="skeleton" style={{ height: 12, width: '70%', marginBottom: 10 }} />
-              <div className="skeleton" style={{ height: 12, width: '55%' }} />
-            </div>
+            <Card>
+              <CardContent className="space-y-2.5 pt-6">
+                <Skeleton className="h-3.5 w-2/5" />
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </CardContent>
+            </Card>
           ) : repositories.length === 0 ? (
-            <motion.div
-              className="card"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ textAlign: 'center', padding: '40px 18px' }}
-            >
-              <Map size={28} strokeWidth={1.6} aria-hidden="true" style={{ marginBottom: 8, color: 'var(--accent)' }} />
-              <h3>No repositories connected yet</h3>
-              <p className="muted small" style={{ maxWidth: 420, margin: '0 auto' }}>
-                Connect your first repository above and the graph — canvas, chat and PR review —
-                appears here.
-              </p>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Card>
+                <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+                  <Map size={28} strokeWidth={1.6} aria-hidden="true" className="text-primary" />
+                  <h3 className="text-sm font-semibold">No repositories connected yet</h3>
+                  <p className="max-w-md text-xs text-muted-foreground">
+                    Connect your first repository above and the graph — canvas, chat and PR review —
+                    appears here.
+                  </p>
+                </CardContent>
+              </Card>
             </motion.div>
           ) : (
             <motion.div
@@ -158,7 +183,7 @@ export default function LandingPage() {
                   >
                     <RepoCard repo={repo} onReindex={(id) => {
                       api.startIndex(id).then(() => load()).catch((e) => setError(e instanceof Error ? e.message : String(e)));
-                    }} onDelete={(id) => void removeRepository(id)} />
+                    }} onDelete={requestDelete} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -244,6 +269,31 @@ export default function LandingPage() {
       </main>
 
       <Footer />
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this repository?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `${pendingDelete.owner}/${pendingDelete.name} and its indexed graph, jobs, and reviews will be deleted. This cannot be undone.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              {deleting ? 'Removing…' : 'Remove repository'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

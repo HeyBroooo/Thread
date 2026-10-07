@@ -9,6 +9,10 @@ import { useRepositoryContext } from '@/components/RepositoryLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface ReviewSummary {
   id: string;
@@ -213,11 +217,11 @@ export default function PullRequestsPage() {
 
   if (initialLoading) {
     return (
-      <div className="section" aria-label="Loading pull requests">
-        <div className="skeleton" style={{ height: 30, width: 220, marginBottom: 14 }} />
-        <div className="skeleton" style={{ height: 100, marginBottom: 16 }} />
+      <div className="section space-y-3" aria-label="Loading pull requests">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-24" />
         {[0, 1, 2].map((item) => (
-          <div className="skeleton" key={item} style={{ height: 78, marginBottom: 10 }} />
+          <Skeleton key={item} className="h-20" />
         ))}
       </div>
     );
@@ -315,20 +319,14 @@ export default function PullRequestsPage() {
 
         {capability && !capability.canComment && (
           <motion.div
-            className="card"
-            style={{ border: '1px solid rgba(245, 158, 11, 0.45)', marginBottom: 16 }}
+            style={{ marginBottom: 16 }}
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="card-header">
-              <div>
-                <h2 style={{ display: 'flex', gap: 8, alignItems: 'center' }}>⚠️ Reviews run, comments are blocked</h2>
-                <p className="muted small" style={{ margin: 0, lineHeight: 1.6 }}>
-                  {capability.message}
-                </p>
-              </div>
-            </div>
+            <Alert variant="warning">
+            <AlertTitle>Reviews run, comments are blocked</AlertTitle>
+            <AlertDescription>{capability.message}</AlertDescription>
             {(capability.permissionUpdatePending || capability.accessibleRepoCount === 0) && (
               <p className="small" style={{ margin: '8px 0 0', lineHeight: 1.6 }}>
                 {capability.permissionUpdatePending && (
@@ -432,21 +430,27 @@ export default function PullRequestsPage() {
                 </>
               )}
             </p>
-            {tokenMsg && <p className="muted small">{tokenMsg}</p>}
+            {tokenMsg && <p className="text-xs text-muted-foreground">{tokenMsg}</p>}
+            </Alert>
           </motion.div>
         )}
 
         <motion.div
-          className="card"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
         >
-          <div className="card-header">
-            <h2>Tracked pull requests</h2>
-            <Badge variant="secondary" className="pill">{pullRequests.length}</Badge>
-          </div>
-          {error && <p className="error small">{error}</p>}
+          <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle>Tracked pull requests</CardTitle>
+            <Badge variant="secondary">{pullRequests.length}</Badge>
+          </CardHeader>
+          <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           {pullRequests.length === 0 ? (
             <p className="muted small">
               No pull requests found yet. They appear as soon as GitHub reports them — the service checks for open PRs
@@ -533,19 +537,21 @@ export default function PullRequestsPage() {
               })}
             </motion.ul>
           )}
+          </CardContent>
+          </Card>
         </motion.div>
 
         <motion.div
-          className="card"
           style={{ marginTop: 16 }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: 'easeOut' }}
         >
-          <div className="card-header">
-            <h2>Validated findings</h2>
+          <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle>Validated findings</CardTitle>
             {findings.length > 0 && (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="flex flex-wrap gap-2">
                 {Object.entries(severityCounts).map(([sev, count]) => (
                   <span key={sev} className={`severity-badge severity-${sev}`}>
                     {sev} {count}
@@ -553,46 +559,53 @@ export default function PullRequestsPage() {
                 ))}
               </div>
             )}
-          </div>
+          </CardHeader>
+          <CardContent>
           {findings.length === 0 ? (
-            <p className="muted small">No findings yet.</p>
+            <p className="text-xs text-muted-foreground">No findings yet.</p>
           ) : (
-            <motion.table className="findings" variants={listStagger} initial="hidden" animate="show">
-              <thead>
-                <tr>
-                  <th>Severity</th>
-                  <th>Category</th>
-                  <th>Location</th>
-                  <th>Finding</th>
-                  <th>Confidence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {findings.map((f) => (
-                  <motion.tr key={f.id} variants={row}>
-                    <td>
-                      <span className={`severity-badge ${severityClass(f.severity)}`}>{f.severity}</span>
-                    </td>
-                    <td>{f.category}</td>
-                    <td>
-                      <code>
-                        {f.file_path}:{f.line}
-                      </code>
-                    </td>
-                    <td>
-                      <strong>{f.title}</strong>
-                      <div className="muted small">{f.explanation}</div>
-                      {f.suggestion && <div className="muted small">Suggestion: {f.suggestion}</div>}
-                    </td>
-                    <td>
-                      {Math.round(f.confidence * 100)}%
-                      <div className="muted small">{f.origin}</div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </motion.table>
+            <motion.div variants={listStagger} initial="hidden" animate="show">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Severity</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Finding</TableHead>
+                    <TableHead>Confidence</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {findings.map((f) => (
+                    <motion.tr key={f.id} variants={row} className="border-b border-border align-top">
+                      <TableCell>
+                        <span className={`severity-badge ${severityClass(f.severity)}`}>{f.severity}</span>
+                      </TableCell>
+                      <TableCell>{f.category}</TableCell>
+                      <TableCell>
+                        <code>
+                          {f.file_path}:{f.line}
+                        </code>
+                      </TableCell>
+                      <TableCell>
+                        <strong className="font-medium">{f.title}</strong>
+                        <div className="mt-1 text-xs text-muted-foreground">{f.explanation}</div>
+                        {f.suggestion && (
+                          <div className="mt-1 text-xs text-muted-foreground">Suggestion: {f.suggestion}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {Math.round(f.confidence * 100)}%
+                        <div className="text-xs text-muted-foreground">{f.origin}</div>
+                      </TableCell>
+                    </motion.tr>
+                  ))}
+                </TableBody>
+              </Table>
+            </motion.div>
           )}
+          </CardContent>
+          </Card>
         </motion.div>
       </div>
   );

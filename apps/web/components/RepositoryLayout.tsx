@@ -2,6 +2,9 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RepoShell } from '@/components/RepoShell';
 import { useRepository } from '@/lib/useRepository';
 import type { JobPayload, RepositoryPayload } from '@/lib/api';
@@ -31,14 +34,18 @@ export function RepositoryLayout({ children }: { children: ReactNode }) {
       <div className="repo-shell" aria-label="Loading repository">
         <header className="repo-header">
           <div className="repo-header-inner">
-            <div className="skeleton" style={{ height: 18, width: 220 }} />
-            <div className="skeleton" style={{ height: 34, width: 300 }} />
+            <Skeleton className="h-5 w-56" />
+            <Skeleton className="h-9 w-72" />
           </div>
         </header>
         <main className="repo-main">
-          <div className="section">
-            <div className="skeleton" style={{ height: 28, width: 180, marginBottom: 16 }} />
-            <div className="skeleton" style={{ height: 140, width: '100%' }} />
+          <div className="section space-y-4">
+            <Skeleton className="h-8 w-44" />
+            <div className="grid grid-cols-3 gap-3">
+              {[0, 1, 2, 3, 4, 5].map((tile) => (
+                <Skeleton key={tile} className="h-24" />
+              ))}
+            </div>
           </div>
         </main>
       </div>
@@ -46,7 +53,17 @@ export function RepositoryLayout({ children }: { children: ReactNode }) {
   }
 
   if (!repository) {
-    return <main className="section">{error || 'Repository not found.'}</main>;
+    return (
+      <main className="section flex min-h-[50vh] items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="pt-6">
+            <Alert variant="destructive">
+              <AlertDescription>{error || 'Repository not found.'}</AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </main>
+    );
   }
 
   return (

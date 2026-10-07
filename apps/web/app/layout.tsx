@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { SessionControls } from '@/components/SessionControls';
 import './globals.css';
+import './tailwind.css';
 
 export const metadata: Metadata = {
   title: 'Codebase Intelligence',

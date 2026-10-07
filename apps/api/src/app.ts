@@ -166,7 +166,11 @@ export function createApp(): Hono<AppContext> {
       if (err.httpStatus >= 500) log.error('api.error', { requestId, code: err.code, message: err.message });
       return c.json(err.toBody(requestId), err.httpStatus as 400);
     }
-    log.error('api.unhandled', { requestId, message: err instanceof Error ? err.message : String(err) });
+    log.error('api.unhandled', {
+      requestId,
+      message: err instanceof Error ? err.message : String(err),
+      ...describeDatabaseError(err),
+    });
     return c.json(Errors.internal().toBody(requestId), 500);
   });
 
@@ -553,6 +557,22 @@ function orgIdOf(c: { req: { header: (k: string) => string | undefined } }): str
   return c.req.header('x-organization-id') ?? 'local-org';
 }
 
+/**
+ * Surface the fields a Postgres error carries (code, constraint, detail) so an
+ * unhandled 500 can be traced to an exact constraint instead of a bare message.
+ */
+function describeDatabaseError(err: unknown): Record<string, unknown> {
+  if (!err || typeof err !== 'object') return {};
+  const source = err as { code?: unknown; detail?: unknown; constraint?: unknown; table?: unknown; cause?: unknown };
+  const nested = source.cause && typeof source.cause === 'object' ? (source.cause as typeof source) : source;
+  const out: Record<string, unknown> = {};
+  for (const key of ['code', 'detail', 'constraint', 'table'] as const) {
+    const value = nested[key];
+    if (typeof value === 'string' && value.length > 0) out[key] = value;
+  }
+  return out;
+}
+
 async function requireRepo(id: string, organizationId: string): Promise<RepoRecord> {
   const repo = await getRepo(id, organizationId);
   if (!repo) throw Errors.repositoryNotFound(id);
@@ -812,21 +832,31 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
   app.delete('/api/repositories/:id', async (c) => {
     const repositoryId = c.req.param('id');
     const organizationId = orgIdOf(c);
-    await requireRepo(repositoryId, organizationId);
+    const repo = await requireRepo(repositoryId, organizationId);
     if (!jobQueue.removeRepositoryJobs(repositoryId)) {
       throw new AppError('REPOSITORY_BUSY', 'Wait for active repository work to finish before removing it.', 409);
     }
-    await graphStore().clearRepository(repositoryId);
-    if (usingDatabase()) {
-      await db.writeAuditLog({
-        organizationId,
-        repositoryId,
-        action: 'repository.deleted',
-        metadata: {},
-        requestId: c.get('requestId'),
-      });
-    }
+    // Postgres removal is transactional and clears the graph with the row; the
+    // in-memory fallback has no rows to cascade, so clear its graph directly.
     await deleteRepo(repositoryId, organizationId);
+    if (!usingDatabase()) await graphStore().clearRepository(repositoryId);
+    if (usingDatabase()) {
+      // Logged against the organization (not the deleted row) and never fatal:
+      // an audit-write failure must not turn a completed deletion into an error.
+      await db
+        .writeAuditLog({
+          organizationId,
+          repositoryId: null,
+          action: 'repository.deleted',
+          metadata: { repositoryId, owner: repo.owner, name: repo.name },
+          requestId: c.get('requestId'),
+        })
+        .catch((e) => log.warn('audit.write_failed', {
+          requestId: c.get('requestId'),
+          action: 'repository.deleted',
+          message: e instanceof Error ? e.message : String(e),
+        }));
+    }
     return c.json({ deleted: true });
   });
 

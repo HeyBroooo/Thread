@@ -13,13 +13,40 @@ export { ConnectCard } from './connect-card';
 export { RepoCard } from './repo-card';
 export { StepItem } from './step-item';
 export { Footer } from './footer';
-export { Button } from './button';
+
+// shadcn/ui primitives
+export { Button, buttonVariants } from './button';
+export type { ButtonProps, ButtonVariant, ButtonSize } from './button';
 export { Input } from './input';
 export { Textarea } from './textarea';
 export { Select } from './select';
 export { Label } from './label';
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './card';
-export { Badge } from './badge';
+export { Badge, badgeVariants } from './badge';
+export { Alert, AlertTitle, AlertDescription } from './alert';
 export { Separator } from './separator';
 export { Skeleton } from './skeleton';
-export { Alert } from './alert';
+export { Progress } from './progress';
+export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './table';
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from './dropdown-menu';
+export {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogPortal,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from './alert-dialog';
