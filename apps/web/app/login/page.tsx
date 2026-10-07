@@ -137,7 +137,7 @@ export default function LoginPage() {
           ) : (
             <>
               <a
-                className="login-provider-button ui-button ui-button-outline ui-button-lg"
+                className="login-provider-button"
                 href={`/api/auth/google/start?from=${encodeURIComponent(returnTo)}`}
               >
                 <span className="login-google-mark" aria-hidden="true">G</span>
