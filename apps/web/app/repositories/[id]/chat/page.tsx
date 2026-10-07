@@ -16,6 +16,12 @@ export default function ChatPage() {
   const [split, setSplit] = useState(true);
   const [mode] = useState<CanvasMode>('api');
 
+  // On phones the split leaves too little room for the conversation, so start
+  // with the canvas hidden — the toolbar toggle brings it back.
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 680px)').matches) setSplit(false);
+  }, []);
+
   function handleViewOnCanvas(payload: ChatPayload) {
     setCanvasPath(payload.canvasPath);
     setFocusNodeId(payload.canvasPath[0] ?? null);

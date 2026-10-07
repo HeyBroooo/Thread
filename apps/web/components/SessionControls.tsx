@@ -14,9 +14,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export function SessionControls() {
+/**
+ * `floating` pins the control to the viewport corner — used on the landing and
+ * login pages. `inline` renders it in normal flow, which is what the repository
+ * header uses so it can never cover the tab bar.
+ */
+export function SessionControls({ variant = 'floating' }: { variant?: 'floating' | 'inline' } = {}) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
+  const isRepoPage = pathname.startsWith('/repositories/');
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -27,6 +33,9 @@ export function SessionControls() {
   }, [isLoginPage]);
 
   if (!authenticated || isLoginPage) return null;
+  // The floating copy stands down on repository routes, where RepoShell renders
+  // the inline one inside the header instead.
+  if (variant === 'floating' && isRepoPage) return null;
 
   async function signOut() {
     try {
@@ -39,10 +48,10 @@ export function SessionControls() {
   }
 
   return (
-    <div className="fixed right-4 top-3 z-50">
+    <div className={`session-controls ${variant}`}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="shadow-sm">
+          <Button variant="outline" size="sm" className="session-controls-trigger">
             <ShieldCheck aria-hidden="true" />
             Workspace
           </Button>

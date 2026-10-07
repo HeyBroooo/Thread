@@ -200,44 +200,52 @@ export function CanvasWorkspace({
     <div className="canvas-layout no-sidebar" style={{ height: '100%' }}>
       <div className="canvas-center">
         <div className="canvas-toolbar">
-          <form onSubmit={runSearch} style={{ display: 'flex', gap: 8, flex: 1, minWidth: 200 }}>
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search symbols, files, endpoints…"
-            />
-            <Button type="submit" size="sm">Search</Button>
-          </form>
-          <Select
-            value={mode}
-            onChange={(e) => {
-              const nextMode = e.target.value as CanvasMode;
-              setMode(nextMode);
-              if (nextMode === 'full') setLayout('collapsible');
-            }}
-            title="View mode"
-          >
-            {MODES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={activeLayout}
-            onChange={(e) => setLayout(e.target.value as CanvasLayout)}
-            title="Graph layout"
-            disabled={mode === 'full'}
-          >
-            {LAYOUTS.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
-            ))}
-          </Select>
-          <Button type="button" size="sm" variant="outline" onClick={() => void loadFullGraph()}>
-            Reset
-          </Button>
+          <div className="canvas-toolbar-card">
+          <div className="canvas-toolbar-left">
+            <form onSubmit={runSearch} className="canvas-search-form">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search symbols, files, endpoints…"
+                className="canvas-search-input"
+              />
+              <Button type="submit" size="sm" className="canvas-search-btn">Search</Button>
+            </form>
+            <div className="canvas-toolbar-controls">
+              <Select
+                value={mode}
+                onChange={(e) => {
+                  const nextMode = e.target.value as CanvasMode;
+                  setMode(nextMode);
+                  if (nextMode === 'full') setLayout('collapsible');
+                }}
+                title="View mode"
+                className="canvas-select"
+              >
+                {MODES.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                value={activeLayout}
+                onChange={(e) => setLayout(e.target.value as CanvasLayout)}
+                title="Graph layout"
+                disabled={mode === 'full'}
+                className="canvas-select"
+              >
+                {LAYOUTS.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </Select>
+              <Button type="button" size="sm" variant="outline" onClick={() => void loadFullGraph()}>
+                Reset
+              </Button>
+            </div>
+          </div>
           <div className="view-switcher">
             <span className="view-switcher-label">Graph view</span>
             <div className="view-chips">
@@ -259,13 +267,12 @@ export function CanvasWorkspace({
               ))}
             </div>
           </div>
-        </div>
+          </div>
 
         <AnimatePresence>
           {results.length > 0 && (
             <motion.div
-              className="panel ui-card"
-              style={{ position: 'absolute', top: 104, left: 12, width: 340, maxHeight: 320, borderRadius: 10, border: '1px solid var(--border)', zIndex: 6 }}
+              className="panel ui-card canvas-search-results"
               initial={{ opacity: 0, y: -8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -305,6 +312,7 @@ export function CanvasWorkspace({
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
 
         {loading ? (
           <div className="panel ui-card" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
@@ -348,7 +356,9 @@ export function CanvasWorkspace({
           />
         )}
 
-        <div className="canvas-status">
+        <div className="canvas-bottom">
+          <CanvasLegend />
+          <div className="canvas-status">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span title={MODE_HINTS[mode]}>
               {MODES.find((m) => m.value === mode)?.label} · {visibleNodeCount} nodes in view
@@ -367,8 +377,6 @@ export function CanvasWorkspace({
             {status ? `scope: ${status}` : ''} · graph: {indexStatus}
           </div>
         </div>
-        <div style={{ position: 'absolute', bottom: 46, left: 0, right: 0 }}>
-          <CanvasLegend />
         </div>
       </div>
 

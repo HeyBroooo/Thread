@@ -117,7 +117,9 @@ export function ChatPanel({
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35, ease: 'easeOut' }}
           >
-            <MessagesSquare size={24} strokeWidth={1.6} aria-hidden="true" style={{ marginBottom: 10, color: 'var(--accent)' }} />
+            <div className="empty-state-icon">
+              <MessagesSquare size={24} strokeWidth={1.6} aria-hidden="true" />
+            </div>
             <h3>Ask about this codebase</h3>
             <p className="muted" style={{ lineHeight: 1.6 }}>
               Answers are grounded in the indexed graph and cite exact files and line ranges —
@@ -126,7 +128,7 @@ export function ChatPanel({
             <div className="suggestions">
               {suggestionsLoading
                 ? [0, 1, 2].map((i) => (
-                    <Skeleton key={i} style={{ width: 168, height: 30, borderRadius: 999 }} />
+                    <Skeleton key={i} style={{ width: 180, height: 32, borderRadius: 999 }} />
                   ))
                 : suggestions.map((s) => (
                     <MotionButton
@@ -134,10 +136,10 @@ export function ChatPanel({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="chip"
+                      className="chip suggestions-chip"
                       onClick={() => void send(s)}
-                      whileHover={{ scale: 1.04, y: -1 }}
-                      whileTap={{ scale: 0.97 }}
+                      whileHover={{ x: 3 }}
+                      whileTap={{ scale: 0.98 }}
                       transition={{ duration: 0.15 }}
                     >
                       {s}

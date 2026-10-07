@@ -50,3 +50,5 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 } from './alert-dialog';
+export { Marquee } from './marquee';
+export { FloatingNavbar } from './floating-navbar';

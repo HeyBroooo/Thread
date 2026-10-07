@@ -13,12 +13,10 @@ interface FeatureCardProps {
 export function FeatureCard({ icon, title, body }: FeatureCardProps) {
   const Icon = icon;
 
+  // Hover motion lives in `.feature-card:hover` so it stays consistent with the
+  // server-rendered feature cards on the repository overview page.
   return (
-    <motion.div
-      className="feature-card"
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-    >
+    <motion.div className="feature-card">
       <GlareCard className="feature-card-glare">
         <div className="icon"><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></div>
         <h3>{title}</h3>
