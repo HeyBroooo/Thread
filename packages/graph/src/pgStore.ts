@@ -1,5 +1,6 @@
 import { getPool } from '@cbi/db';
 import type { EdgeType, ExtractionMethod, GraphEdge, GraphNode, NodeType } from '@cbi/shared';
+import { buildValuesTuples } from './sqlValues.js';
 import {
   DEFAULT_TRAVERSAL_LIMITS,
   type GraphCounts,
@@ -89,8 +90,7 @@ export class PgGraphStore implements GraphStore {
       for (let i = 0; i < nodes.length; i += CHUNK) {
         const chunk = nodes.slice(i, i + CHUNK);
         const values: unknown[] = [];
-        const tuples = chunk.map((n, idx) => {
-          const b = idx * 11;
+        for (const n of chunk) {
           values.push(
             n.id,
             n.repositoryId,
@@ -104,8 +104,8 @@ export class PgGraphStore implements GraphStore {
             n.contentHash,
             JSON.stringify(n.metadata ?? {}),
           );
-          return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11})`;
-        });
+        }
+        const tuples = buildValuesTuples(chunk.length, 11);
         await client.query(
           `INSERT INTO graph_nodes
              (id, repository_id, node_type, name, qualified_name, file_path, language, start_line, end_line, content_hash, metadata_json)
@@ -142,8 +142,7 @@ export class PgGraphStore implements GraphStore {
       for (let i = 0; i < edges.length; i += CHUNK) {
         const chunk = edges.slice(i, i + CHUNK);
         const values: unknown[] = [];
-        const tuples = chunk.map((e, idx) => {
-          const b = idx * 12;
+        for (const e of chunk) {
           values.push(
             e.id,
             e.repositoryId,
@@ -158,8 +157,8 @@ export class PgGraphStore implements GraphStore {
             e.confidence,
             JSON.stringify(e.metadata ?? {}),
           );
-          return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12})`;
-        });
+        }
+        const tuples = buildValuesTuples(chunk.length, 12);
         await client.query(
           `INSERT INTO graph_edges
              (id, repository_id, source_node_id, target_node_id, edge_type, source_file, source_line, source_column, evidence, extraction_method, confidence, metadata_json)
