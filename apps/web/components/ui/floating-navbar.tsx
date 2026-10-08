@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 export function FloatingNavbar({ className }: { className?: string }) {
@@ -24,57 +25,43 @@ export function FloatingNavbar({ className }: { className?: string }) {
   });
 
   const navItems = [
-    { name: 'Repositories', link: '#repos' },
-    { name: 'How it works', link: '#how' },
     { name: 'Connect', link: '#connect' },
+    { name: 'Repositories', link: '#repos' },
+    { name: 'Features', link: '#features' },
+    { name: 'How it works', link: '#how' },
+    { name: 'FAQ', link: '#faq' },
   ];
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        initial={{ opacity: 1, y: -120 }}
-        animate={{ y: visible ? 0 : -120, opacity: visible ? 1 : 0 }}
-        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ y: -80, opacity: 1 }}
+        animate={{ y: visible ? 0 : -80, opacity: visible ? 1 : 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           'floating-nav',
-          'fixed z-50 top-4 inset-x-0 mx-auto px-4 sm:px-6 py-3 sm:py-4 rounded-xl',
-          'border border-solid',
-          'flex items-center justify-center gap-1 sm:gap-5',
-          'shadow-[0_2px_6px_-2px_rgba(25,46,34,0.08),0_1px_0_0_rgba(25,46,34,0.04),0_0_0_1px_rgba(25,46,34,0.06)]',
-          'hover:shadow-[0_8px_24px_-6px_rgba(25,46,34,0.12),0_0_0_1px_rgba(25,46,34,0.08)]',
-          'transition-shadow duration-200',
+          'fixed inset-x-0 top-0 z-50',
+          'flex items-center justify-between gap-4',
+          'px-5 py-3 sm:px-8',
           className,
         )}
-        style={{
-          // Fit the content instead of a fixed viewport share, so the bar stays on
-          // one line on phones rather than wrapping under itself.
-          maxWidth: 'calc(100% - 32px)',
-          width: 'fit-content',
-          backdropFilter: 'blur(18px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(18px) saturate(180%)',
-          background: 'rgba(255, 255, 255, 0.88)',
-          borderColor: 'var(--border)',
-          borderRadius: '14px',
-        }}
       >
-        {navItems.map((item, idx) => (
-          <Link
-            key={idx}
-            href={item.link}
-            className={cn(
-              'relative inline-flex items-center gap-1.5 text-sm font-medium',
-              'text-foreground hover:text-accent transition-colors duration-140',
-              'rounded-lg px-3 py-1.5 -mx-1.5 -my-1.5',
-              'hover:bg-accent-soft',
-              idx === navItems.length - 1
-                ? 'bg-accent text-white font-semibold shadow-[0_2px_6px_-2px_rgba(47,118,89,0.3)] hover:bg-accent hover:shadow-[0_4px_12px_-4px_rgba(47,118,89,0.4)]'
-                : '',
-            )}
-            style={idx === navItems.length - 1 ? { color: '#fff' } : {}}
-          >
-            {item.name}
-          </Link>
-        ))}
+        <Link href="/" className="lp-nav-brand">
+          <Image src="/logo-128.png" alt="" width={28} height={28} priority />
+          <span>Codebase Intelligence</span>
+        </Link>
+
+        <nav className="lp-nav-links" aria-label="Primary">
+          {navItems.map((item) => (
+            <a key={item.name} href={item.link}>
+              {item.name}
+            </a>
+          ))}
+        </nav>
+
+        <Link href="#connect" className="lp-nav-cta">
+          Get started
+        </Link>
       </motion.div>
     </AnimatePresence>
   );

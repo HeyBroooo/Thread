@@ -5,10 +5,10 @@ import { api } from '@/lib/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Alert, AlertDescription } from './alert';
 import { Button } from './button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card';
 import { Input } from './input';
-import { ChevronDown } from 'lucide-react';
-
-const GREEN = '#2D7A55';
+import { Label } from './label';
+import { ChevronDown, Loader2 } from 'lucide-react';
 
 export function ConnectCard() {
   const [error, setError] = useState<string | null>(null);
@@ -70,212 +70,80 @@ export function ConnectCard() {
   }
 
   return (
-    <div className="connect-shell">
-      <motion.div
-        initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
-        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '100%',
-            background: '#fff',
-            borderRadius: '12px',
-            border: '1px solid #e2e8e4',
-            padding: '28px 28px 24px',
-            boxShadow: '0 1px 3px rgba(25,46,34,0.04), 0 8px 24px rgba(25,46,34,0.06)',
-          }}
-        >
-          {/* Header */}
-          <div style={{ marginBottom: '20px' }}>
-            <h2
-              style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#17231e',
-                margin: '0 0 6px',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Connect a repository
-            </h2>
-            <p
-              className="connect-card-copy"
-              style={{
-                fontSize: '14px',
-                color: '#5e6c64',
-                margin: '0',
-                lineHeight: '1.5',
-              }}
-            >
-              Paste a GitHub URL — we clone it and build the graph. No browser crawl, ever.
-            </p>
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="connect-shell"
+    >
+      <Card className="lp-connect-card w-full border-border shadow-md">
+        <CardHeader className="gap-1.5 pb-4">
+          <CardTitle className="text-[20px] font-bold tracking-[-0.02em]">
+            Connect a repository
+          </CardTitle>
+          <CardDescription className="text-[14px] leading-relaxed">
+            Paste a GitHub URL — we clone it and build the graph. No browser crawl, ever.
+          </CardDescription>
+        </CardHeader>
 
-          {/* Form */}
-          <form onSubmit={connect} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* URL + Branch row + Connect button */}
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '12px',
-                alignItems: 'flex-end',
-              }}
-            >
-              {/* Repository URL */}
-              <label
-                style={{
-                  flex: '2 1 240px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  minWidth: '0',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    color: '#17231e',
-                  }}
-                >
-                  Repository URL
-                </span>
+        <CardContent className="pt-0">
+          <form onSubmit={connect} className="flex flex-col gap-3.5">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex min-w-0 flex-[2_1_240px] flex-col gap-1.5">
+                <Label htmlFor="connect-repo-url">Repository URL</Label>
                 <Input
+                  id="connect-repo-url"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                   placeholder="https://github.com/HeyBroooo/cognimail"
-                  style={{ width: '100%' }}
+                  autoComplete="off"
                 />
-              </label>
-
-              {/* Branch */}
-              <label
-                style={{
-                  flex: '1 1 160px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  minWidth: '0',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    color: '#17231e',
-                  }}
-                >
-                  Branch (optional)
-                </span>
+              </div>
+              <div className="flex min-w-0 flex-[1_1_160px] flex-col gap-1.5">
+                <Label htmlFor="connect-branch">Branch (optional)</Label>
                 <Input
+                  id="connect-branch"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
                   placeholder="Use repository default"
-                  style={{ width: '100%' }}
+                  autoComplete="off"
                 />
-              </label>
-
-              {/* Connect button — aligned to right of input row */}
+              </div>
               <Button
                 type="submit"
                 disabled={connecting}
-                style={{
-                  flex: '0 0 auto',
-                  background: GREEN,
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '10px 22px',
-                  fontSize: '14px',
-                  fontWeight: '700',
-                  minWidth: '110px',
-                  boxShadow: '0 4px 12px rgba(45,122,85,0.25)',
-                  transition: 'background 140ms ease, box-shadow 140ms ease, transform 140ms ease',
-                  cursor: connecting ? 'not-allowed' : 'pointer',
-                  opacity: connecting ? 0.85 : 1,
-                  transform: connecting ? 'none' : undefined,
-                }}
-                onMouseEnter={(e) => {
-                  if (!connecting) {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#27684d';
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 18px rgba(45,122,85,0.35)';
-                    (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!connecting) {
-                    (e.currentTarget as HTMLButtonElement).style.background = GREEN;
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(45,122,85,0.25)';
-                    (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
-                  }
-                }}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.outline = '3px solid rgba(45,122,85,0.2)';
-                  (e.currentTarget as HTMLButtonElement).style.outlineOffset = '2px';
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.outline = 'none';
-                }}
+                className="h-10 shrink-0 px-5 font-semibold shadow-sm"
               >
-                {connecting
-                  ? connectStage === 'checking'
-                    ? 'Checking access…'
-                    : 'Cloning…'
-                  : 'Connect'}
+                {connecting ? (
+                  <>
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                    {connectStage === 'checking' ? 'Checking…' : 'Cloning…'}
+                  </>
+                ) : (
+                  'Connect'
+                )}
               </Button>
             </div>
 
-            {/* Advanced accordion */}
-            <div
-              style={{
-                border: '1px solid #dfe6e0',
-                borderRadius: '6px',
-                background: '#f8faf8',
-                overflow: 'hidden',
-                marginTop: '2px',
-              }}
-            >
+            {/* Advanced: existing checkout or manual owner/name */}
+            <div className="overflow-hidden rounded-lg border border-border bg-muted">
               <button
                 type="button"
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 14px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  color: '#5e6c64',
-                  fontWeight: '500',
-                  textAlign: 'left',
-                  fontFamily: 'inherit',
-                  transition: 'background 140ms ease',
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.background = '#f0f4f1';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.background = 'none';
-                }}
+                className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[13.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setAdvancedOpen((v) => !v)}
                 aria-expanded={advancedOpen}
               >
                 <ChevronDown
                   size={14}
-                  style={{
-                    color: '#5e6c64',
-                    transition: 'transform 200ms ease',
-                    transform: advancedOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
-                    flexShrink: 0,
-                  }}
+                  strokeWidth={2}
+                  aria-hidden="true"
+                  className="shrink-0 transition-transform duration-200"
+                  style={{ transform: advancedOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
                 />
-                <span style={{ margin: 0 }}>Advanced</span>
-                <span style={{ color: '#87938b', fontWeight: '400' }}>— existing checkout or manual owner/name</span>
+                <span>Advanced</span>
+                <span className="font-normal text-muted-foreground/70">
+                  — existing checkout or manual owner/name
+                </span>
               </button>
 
               <AnimatePresence initial={false}>
@@ -285,102 +153,43 @@ export function ConnectCard() {
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                    style={{ overflow: 'hidden' }}
+                    className="overflow-hidden"
                   >
-                    <div
-                      style={{
-                        padding: '4px 14px 14px',
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '12px',
-                      }}
-                    >
-                      <label
-                        style={{
-                          flex: '1 1 140px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          minWidth: '0',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            fontWeight: '500',
-                            color: '#17231e',
-                          }}
-                        >
-                          Owner
-                        </span>
+                    <div className="flex flex-wrap gap-3 px-3.5 pb-3.5 pt-1">
+                      <div className="flex min-w-0 flex-[1_1_140px] flex-col gap-1.5">
+                        <Label htmlFor="connect-owner">Owner</Label>
                         <Input
+                          id="connect-owner"
                           value={owner}
                           onChange={(e) => setOwner(e.target.value)}
                           placeholder="acme"
-                          style={{ width: '100%' }}
+                          autoComplete="off"
                         />
-                      </label>
-                      <label
-                        style={{
-                          flex: '1 1 140px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          minWidth: '0',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            fontWeight: '500',
-                            color: '#17231e',
-                          }}
-                        >
-                          Repository
-                        </span>
+                      </div>
+                      <div className="flex min-w-0 flex-[1_1_140px] flex-col gap-1.5">
+                        <Label htmlFor="connect-name">Repository</Label>
                         <Input
+                          id="connect-name"
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="patient-portal"
-                          style={{ width: '100%' }}
+                          autoComplete="off"
                         />
-                      </label>
-                      <label
-                        style={{
-                          flex: '1 1 140px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          minWidth: '0',
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            fontWeight: '500',
-                            color: '#17231e',
-                          }}
-                        >
-                          Local checkout path (optional)
-                        </span>
+                      </div>
+                      <div className="flex min-w-0 flex-[1_1_160px] flex-col gap-1.5">
+                        <Label htmlFor="connect-checkout">Local checkout path (optional)</Label>
                         <Input
+                          id="connect-checkout"
                           value={checkoutPath}
                           onChange={(e) => setCheckoutPath(e.target.value)}
-                          placeholder="C:\\code\\patient-portal"
-                          style={{ width: '100%' }}
+                          placeholder="C:\code\patient-portal"
+                          autoComplete="off"
                         />
-                      </label>
+                      </div>
                     </div>
-                    <p
-                      style={{
-                        margin: '0 0 0 14px',
-                        fontSize: '12px',
-                        color: '#87938b',
-                        lineHeight: '1.5',
-                      }}
-                    >
-                      Without a checkout path the API clones into <code>.cbi/checkouts</code>. If the repository is{' '}
-                      private, install the GitHub App on it first.
+                    <p className="m-0 px-3.5 pb-3.5 text-xs leading-relaxed text-muted-foreground">
+                      Without a checkout path the API clones into <code>.cbi/checkouts</code>. If the
+                      repository is private, install the GitHub App on it first.
                     </p>
                   </motion.div>
                 )}
@@ -388,34 +197,19 @@ export function ConnectCard() {
             </div>
           </form>
 
-          {/* Error alert */}
-          {error && (
-            <div
-              style={{
-                marginTop: '14px',
-                padding: '12px 14px',
-                borderRadius: '6px',
-                background: 'rgba(189,69,69,0.08)',
-                border: '1px solid rgba(189,69,69,0.25)',
-              }}
-            >
-              <p style={{ margin: 0, fontSize: '13px', color: '#bd4545' }}>{error}</p>
-            </div>
-          )}
+          {error ? (
+            <Alert variant="destructive" className="mt-3.5 px-3 py-2.5">
+              <AlertDescription className="text-[13px]">{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-          {/* Stage message */}
           <AnimatePresence initial={false}>
-            {connectStage && (
+            {connectStage ? (
               <motion.p
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                style={{
-                  marginTop: '14px',
-                  fontSize: '12px',
-                  color: '#87938b',
-                  transition: 'opacity 200ms ease, transform 200ms ease',
-                }}
+                className="mt-3.5 text-xs text-muted-foreground"
               >
                 {connectStage === 'checking'
                   ? 'Checking whether the GitHub App can access this repository…'
@@ -423,64 +217,40 @@ export function ConnectCard() {
                     ? 'Cloning the repository and building the graph — this runs in the background.'
                     : 'Connected. The graph is building — the repository updates as indexing progresses.'}
               </motion.p>
-            )}
+            ) : null}
           </AnimatePresence>
 
-          {/* Access warning */}
           <AnimatePresence initial={false}>
-            {access && access.accessible === false && (
+            {access && access.accessible === false ? (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
-                style={{ overflow: 'hidden', marginTop: '12px' }}
+                className="overflow-hidden"
               >
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '6px',
-                    background: 'rgba(242,196,109,0.07)',
-                    border: '1px solid rgba(242,196,109,0.35)',
-                  }}
-                >
-                  <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#795615' }}>{access.message}</p>
-                  {access.requiresInstall && (
-                    <a
-                      href="https://github.com/settings/installations"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: 'inline-block',
-                        marginTop: '10px',
-                        padding: '8px 16px',
-                        background: GREEN,
-                        color: '#fff',
-                        borderRadius: '6px',
-                        textDecoration: 'none',
-                        fontWeight: '600',
-                        fontSize: '13px',
-                        boxShadow: '0 4px 12px rgba(45,122,85,0.25)',
-                        transition: 'background 140ms ease, transform 140ms ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLAnchorElement).style.background = '#27684d';
-                        (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLAnchorElement).style.background = GREEN;
-                        (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
-                      }}
-                    >
-                      Grant access to {access.owner}/{access.name}
-                    </a>
-                  )}
-                </div>
+                <Alert variant="warning" className="mt-3">
+                  <AlertDescription className="text-[13px]">
+                    {access.message}
+                    {access.requiresInstall ? (
+                      <a
+                        href="https://github.com/settings/installations"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2.5 inline-flex"
+                      >
+                        <Button type="button" size="sm">
+                          Grant access to {access.owner}/{access.name}
+                        </Button>
+                      </a>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
-        </div>
-      </motion.div>
-    </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
