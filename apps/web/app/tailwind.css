@@ -626,7 +626,7 @@ The generic `button, .ui-button` rule above matches a variant button through
 
 .dashboard-hero {
   position: relative;
-  isolation-isolate;
+  isolation: isolate;
   padding: 64px 24px 48px;
   display: flex;
   align-items: flex-end;
@@ -743,18 +743,6 @@ The generic `button, .ui-button` rule above matches a variant button through
 
 .dashboard-hero {
   padding: 64px 24px 40px;
-}
-
-.dashboard-hero-inner {
-  max-width: 1120px;
-}
-
-.dashboard-hero-identity {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 16px;
 }
 
 .dashboard-hero-look {
