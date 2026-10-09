@@ -834,7 +834,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   padding: 8px 0 40px;
 }
 
-.landing-page { min-height: 100vh; overflow: clip; background: var(--bg); }
+/* Transparent so the fixed Spline backdrop shows through the whole page. */
+.landing-page { min-height: 100vh; overflow: clip; background: transparent; }
 .top-nav { padding: 16px 24px 0; }
 .nav-inner {
   width: 100%;
@@ -858,7 +859,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 
 .hero {
   padding: 68px 24px 52px;
-  background-color: #eaf1eb;
+  background-color: transparent;
   background-image: linear-gradient(rgba(58, 96, 71, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(58, 96, 71, 0.045) 1px, transparent 1px);
   background-size: 40px 40px;
   text-align: center;

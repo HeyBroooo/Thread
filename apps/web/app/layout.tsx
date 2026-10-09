@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { SessionControls } from '@/components/SessionControls';
+import { SplineBackground } from '@/components/SplineBackground';
 import './globals.css';
 import './tailwind.css';
 
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <SplineBackground />
         {children}
         <SessionControls />
       </body>
