@@ -59,20 +59,25 @@ export function CanvasMock() {
   return (
     <MockWindow title="canvas · force layout" className="lp-mock-canvas">
       <svg viewBox="0 0 100 100" className="lp-graph" role="img" aria-label="Knowledge graph preview">
-        {GRAPH_EDGES.map(([a, b], i) => (
-          <line
-            key={i}
-            x1={GRAPH_NODES[a].x}
-            y1={GRAPH_NODES[a].y}
-            x2={GRAPH_NODES[b].x}
-            y2={GRAPH_NODES[b].y}
-            className={`lp-graph-edge ${a === active || b === active ? 'is-hot' : ''}`}
-          />
-        ))}
+        {GRAPH_EDGES.map(([a, b], i) => {
+          const na = GRAPH_NODES[a];
+          const nb = GRAPH_NODES[b];
+          if (!na || !nb) return null;
+          return (
+            <line
+              key={i}
+              x1={na.x}
+              y1={na.y}
+              x2={nb.x}
+              y2={nb.y}
+              className={`lp-graph-edge ${a === active || b === active ? 'is-hot' : ''}`}
+            />
+          );
+        })}
         {GRAPH_NODES.map((n, i) => (
           <g key={i} className={`lp-graph-node ${i === active ? 'is-active' : ''}`}>
-            <circle cx={n.x} cy={n.y} r={n.r} fill={n.c} />
-            {i === active ? <circle cx={n.x} cy={n.y} r={n.r + 4} className="lp-graph-halo" /> : null}
+            {n && <circle cx={n.x} cy={n.y} r={n.r} fill={n.c} />}
+            {i === active && n ? <circle cx={n.x} cy={n.y} r={n.r + 4} className="lp-graph-halo" /> : null}
           </g>
         ))}
       </svg>
@@ -215,17 +220,21 @@ export function CanvasShowcase() {
 function CanvasMockGraph() {
   return (
     <div className="lp-showcase-graph">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Repository graph">
-        {GRAPH_EDGES.map(([a, b], i) => (
-          <line
-            key={i}
-            x1={GRAPH_NODES[a].x}
-            y1={GRAPH_NODES[a].y}
-            x2={GRAPH_NODES[b].x}
-            y2={GRAPH_NODES[b].y}
-            className="lp-graph-edge"
-          />
-        ))}
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Repository graph">        {GRAPH_EDGES.map(([a, b], i) => {
+          const na = GRAPH_NODES[a];
+          const nb = GRAPH_NODES[b];
+          if (!na || !nb) return null;
+          return (
+            <line
+              key={i}
+              x1={na.x}
+              y1={na.y}
+              x2={nb.x}
+              y2={nb.y}
+              className="lp-graph-edge"
+            />
+          );
+        })}
         {GRAPH_NODES.map((n, i) => (
           <circle key={i} cx={n.x} cy={n.y} r={n.r} fill={n.c} className="lp-graph-node-dot" />
         ))}

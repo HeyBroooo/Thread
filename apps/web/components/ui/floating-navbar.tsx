@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { gsap } from 'gsap';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -101,7 +100,18 @@ export function FloatingNavbar({ className }: { className?: string }) {
       )}
     >
       <Link href="/" className="lp-nav-brand">
-        <Image src="/logo-128.png" alt="" width={28} height={28} priority />
+        <span className="lp-nav-brand-mark" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="26" height="26" rx="7" fill="url(#navLogoGrad)" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round"/>
+            <path d="M8.4 14.2 13 16.2l4.6-4.6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <defs>
+              <linearGradient id="navLogoGrad" x1="0" y1="0" x2="26" y2="26" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#34d399"/>
+                <stop offset="1" stopColor="#38bdf8"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </span>
         <span>Codebase Intelligence</span>
       </Link>
 

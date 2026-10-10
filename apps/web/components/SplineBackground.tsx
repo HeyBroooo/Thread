@@ -5,27 +5,19 @@ import { gsap } from 'gsap';
 import { cn } from '@/lib/utils';
 
 /**
- * The interactive Spline scene the product is themed around.
+ * Landing-page Spline backdrop.
  *
- * - `SPLINE_SCENE_URL` is the landing / public backdrop: the scene shown on
- *   every route before the visitor authenticates (and on the public pages).
- * - `DASHBOARD_SPLINE_URL` is the dashboard scene. It replaces the landing
- *   backdrop ONLY on authenticated paths, so a visitor who signs in sees the
- *   dashboard scene instead of the login splash.
- *
- * Both URLs are module-level constants so the site can be asserted against
- * them in tests instead of being duplicated across components.
+ * One ambient scene behind the hero so the dark hero reads properly, the logo is
+ * hidden as an asset, and the foreground (pill, headline, buttons, stats) stays
+ * legible. The scene is loaded lazily, one-time per session, and is display-only
+ * so pointer events on the foreground are never blocked.
  */
-export const SPLINE_SCENE_URL = 'https://prod.spline.design/bTZSSbAPA2lktqwZ/scene.splinecode';
-export const DASHBOARD_SPLINE_URL = 'https://prod.spline.design/bTZSSbAPA2lktqwZ/scene.splinecode';
+export const SPLINE_SCENE_URL =
+  'https://prod.spline.design/bTZSSbAPA2lktqwZ/scene.splinecode';
+
 const SPLINE_VIEWER_SRC =
   'https://cdn.spline.design/@splinetool/viewer@2.0.75/build/spline-viewer.js';
 
-/**
- * The viewer is a web component, so the module has to be injected once before
- * any `<spline-viewer>` element can upgrade. Several backgrounds mount in a
- * session (route changes remount the layout), hence the shared promise.
- */
 let viewerModule: Promise<void> | null = null;
 
 function loadSplineViewer(): Promise<void> {
@@ -38,23 +30,137 @@ function loadSplineViewer(): Promise<void> {
     script.type = 'module';
     script.async = true;
     script.src = SPLINE_VIEWER_SRC;
+    script.setAttribute('loading', 'lazy');
+    script.setAttribute('nomodule', '');
     script.addEventListener('load', () => resolve());
-    script.addEventListener('error', () => reject(new Error('Spline viewer failed to load')));
+    script.addEventListener('error', () =>
+      reject(new Error('Spline viewer failed to load'))
+    );
     document.head.append(script);
   });
 
   return viewerModule;
 }
 
-/**
- * Fixed, full-viewport 3D backdrop that sits behind every route.
- *
- * The element is created imperatively (rather than as JSX) because `spline-viewer`
- * is an untyped custom element whose attributes must be set before insertion so
- * the scene starts on the right URL. `pointer-events: none` everywhere keeps the
- * canvas, chat and scroll interactions working normally on top of it.
- */
+function sceneFallback(): React.ReactNode {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 bg-[linear-gradient(160deg,#041713_0%,#061c18_38%,#04121c_72%,#030b10_100%)]"
+    />
+  );
+}
+
 export function SplineBackground({
+  className,
+  opacity = 0.95,
+  reducedMotion = false,
+  showScene = true,
+  showFallback = true,
+}: {
+  className?: string;
+  opacity?: number;
+  reducedMotion?: boolean;
+  showScene?: boolean;
+  showFallback?: boolean;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    let cancelled = false;
+
+    void loadSplineViewer().then(() => {
+      if (cancelled || !hostRef.current) return;
+
+      const viewer = document.createElement('spline-viewer');
+      viewer.setAttribute('url', SPLINE_SCENE_URL);
+      viewer.setAttribute('loading-anim-type', 'none');
+      viewer.setAttribute('autofit', 'true');
+      viewer.setAttribute('show-axis', 'false');
+      viewer.setAttribute('show-grid', 'false');
+      viewer.setAttribute('show-orbit', 'false');
+      viewer.setAttribute('show-find-entity', 'false');
+      viewer.setAttribute('background-type', 'scene');
+      viewer.setAttribute('show-sun', 'false');
+      viewer.setAttribute('shadow-intensity', '0');
+      viewer.setAttribute('fps-limit', '30');
+      viewer.setAttribute('render-quality', 'medium');
+      viewer.setAttribute('show-skylight', 'false');
+      viewer.setAttribute('light-intensity', '0.9');
+      viewer.setAttribute('particle-count', '0');
+      viewer.setAttribute('sparkle-count', '0');
+      viewer.setAttribute('show-counters', 'false');
+      viewer.setAttribute('show-camera-controls', 'false');
+      viewer.setAttribute('show-navigate', 'false');
+      viewer.setAttribute('show-animation', 'false');
+
+      viewer.style.display = 'block';
+      viewer.style.width = '100%';
+      viewer.style.height = '100%';
+      viewer.style.pointerEvents = 'none';
+      viewer.style.position = 'absolute';
+      viewer.style.inset = '0';
+      viewer.style.backfaceVisibility = 'hidden';
+      viewer.style.transformStyle = 'preserve-3d';
+
+      hostRef.current.replaceChildren(viewer);
+
+      if (reducedMotion) {
+        gsap.set(viewer, { autoAlpha: 1 });
+      } else {
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reducedMotion]);
+
+  const sceneContent = showScene
+    ? (
+      <div
+        ref={hostRef}
+        className="absolute inset-0 pointer-events-none mix-blend-screen"
+        style={{ opacity, backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+      />
+    )
+    : null;
+
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('pointer-events-none fixed inset-0 overflow-hidden', className)}
+    >
+      {showFallback ? sceneFallback() : null}
+      {sceneContent}
+    </div>
+  );
+}
+
+/** ---------- dashboard scene (kept for /dashboard only) ---------- */
+
+export const DASHBOARD_SPLINE_URL =
+  'https://prod.spline.design/bTZSSbAPA2lktqwZ/scene.splinecode';
+
+function dashboardSceneFallback(): React.ReactNode {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[linear-gradient(160deg,#041713_0%,#061c18_38%,#04121c_72%,#030b10_100%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(52,211,153,0.20),transparent_60%),radial-gradient(90%_70%_at_85%_110%,rgba(56,189,248,0.16),transparent_62%)]"
+      />
+    </>
+  );
+}
+
+export function DashboardSplineBackground({
   className,
   opacity = 1,
   scrimClassName = 'bg-[radial-gradient(120%_100%_at_50%_0%,transparent_30%,rgba(3,11,16,0.66)_100%)]',
@@ -76,7 +182,7 @@ export function SplineBackground({
         if (cancelled || !hostRef.current) return;
 
         const viewer = document.createElement('spline-viewer');
-        viewer.setAttribute('url', SPLINE_SCENE_URL);
+        viewer.setAttribute('url', DASHBOARD_SPLINE_URL);
         viewer.setAttribute('loading-anim-type', 'none');
         viewer.style.display = 'block';
         viewer.style.width = '100%';
@@ -87,18 +193,10 @@ export function SplineBackground({
 
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           gsap.set(viewer, { autoAlpha: 1 });
-        } else {
-          gsap.fromTo(
-            viewer,
-            { autoAlpha: 0, scale: 1.06 },
-            { autoAlpha: 1, scale: 1, duration: 1.6, ease: 'power2.out' },
-          );
         }
       })
       .catch(() => {
-        // The gradient base and scrim below are the designed fallback, so a
-        // blocked CDN (offline, strict CSP) degrades gracefully with no console
-        // noise and no layout shift.
+        /* gradient base + scrim are the designed fallback */
       });
 
     return () => {
@@ -111,15 +209,15 @@ export function SplineBackground({
       aria-hidden="true"
       className={cn('pointer-events-none fixed inset-0 -z-10 overflow-hidden', className)}
     >
-      {/* Brand gradient base. The scene is composited with `screen`, so where the
-          canvas is black or missing this gradient is what the user sees — the
-          backdrop can never collapse into a muddy grey. */}
-      <div className="absolute inset-0 bg-[linear-gradient(160deg,#041713_0%,#061c18_38%,#04121c_72%,#030b10_100%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(52,211,153,0.20),transparent_60%),radial-gradient(90%_70%_at_85%_110%,rgba(56,189,248,0.16),transparent_62%)]" />
-
-      <div ref={hostRef} className="absolute inset-0 mix-blend-screen" style={{ opacity }} />
-
-      {scrimClassName ? <div className={cn('absolute inset-0', scrimClassName)} /> : null}
+      {dashboardSceneFallback()}
+      <div
+        ref={hostRef}
+        className="absolute inset-0 mix-blend-screen"
+        style={{ opacity }}
+      />
+      {scrimClassName ? (
+        <div className={cn('absolute inset-0', scrimClassName)} />
+      ) : null}
     </div>
   );
 }

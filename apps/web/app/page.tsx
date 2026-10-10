@@ -14,13 +14,16 @@ import {
   Zap,
   Layers,
   Search,
+  Maximize2,
+  Minimize2,
+  Bot,
+  RefreshCw,
 } from 'lucide-react';
 import { api, type RepositoryPayload } from '@/lib/api';
 import {
   BackgroundOrbit,
   Footer,
   HeroCTA,
-  HeroLogo,
   HeroStats,
   HeroSub,
   HeroTitle,
@@ -48,6 +51,8 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { HeroLogo } from '@/components/ui/hero-logo';
+import { SplineBackground } from '@/components/SplineBackground';
 
 const container = {
   hidden: {},
@@ -148,28 +153,53 @@ export default function LandingPage() {
 
       {/* ===== Hero ===== */}
       <header className="hero">
-        <BackgroundOrbit>
-          <div className="hero-grid-lines" />
-          <div className="hero-inner">
-            <HeroLogo />
-            <motion.div
-              initial={{ opacity: 0, y: 18, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-              style={{ textAlign: 'center', maxWidth: 760, margin: '0 auto 24px' }}
-            >
-              <span className="lp-hero-pill">
-                <span className="lp-hero-pill-dot" aria-hidden="true" />
-                Evidence-backed knowledge graph
-                <Sparkles size={12} strokeWidth={2} aria-hidden="true" />
-              </span>
-            </motion.div>
-            <HeroTitle />
-            <HeroSub />
-            <HeroCTA />
-            <HeroStats repositories={repositories} totalNodes={totalNodes} totalEdges={totalEdges} totalFiles={totalFiles} />
-          </div>
-        </BackgroundOrbit>
+        <SplineBackground showScene showFallback opacity={0.95} />
+        <div className="hero-inner">
+          <HeroLogo />
+          <motion.div
+            initial={{ opacity: 0, y: 18, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            style={{ textAlign: 'center', maxWidth: 760, margin: '0 auto 24px' }}
+          >
+            <span className="lp-hero-pill">
+              <span className="lp-hero-pill-dot" aria-hidden="true" />
+              Evidence-backed knowledge graph
+              <Sparkles size={12} strokeWidth={2} aria-hidden="true" />
+            </span>
+          </motion.div>
+          <HeroTitle />
+          <HeroSub />
+          <HeroCTA />
+          <HeroStats repositories={repositories} totalNodes={totalNodes} totalEdges={totalEdges} totalFiles={totalFiles} />
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            style={{ textAlign: 'center', marginTop: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}
+          >
+            <span className="hero-soba-text">
+              Built for teams that read the graph, not the repo.
+            </span>
+            <span className="hero-soba-controls" aria-label="More landing actions">                <span className="hero-soba-btn" role="button" tabIndex={0} aria-label="Show repository demo graph">
+                  <Maximize2 size={14} strokeWidth={2} aria-hidden="true" />
+                  <span>Focus demo graph</span>
+                </span>
+                <span className="hero-soba-btn" role="button" tabIndex={0} aria-label="Reset the demo scene">
+                  <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
+                  <span>Reset scene</span>
+                </span>
+                <span className="hero-soba-btn hero-soba-btn-ghost" role="button" tabIndex={0} aria-label="Toggle scene animation">
+                  <Bot size={14} strokeWidth={2} aria-hidden="true" />
+                  <span>Auto-play</span>
+                </span>
+                <span className="hero-soba-btn hero-soba-btn-ghost" role="button" tabIndex={0} aria-label="Minimize scene controls">
+                  <Minimize2 size={14} strokeWidth={2} aria-hidden="true" />
+                  <span>Minimize</span>
+                </span>
+            </span>
+          </motion.div>
+        </div>
       </header>
 
       {/* ===== Tech marquee ===== */}

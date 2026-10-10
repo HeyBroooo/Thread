@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { SplineBackground, DashboardSplineBackground } from '@/components/SplineBackground';
 import { SessionControls } from '@/components/SessionControls';
-import { SplineBackground } from '@/components/SplineBackground';
 import './globals.css';
 import './tailwind.css';
 
@@ -20,7 +20,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <SplineBackground />
+        {/* Landing and dashboard share the same scene source, but the landing page
+        imports its own SplineBackground so the logo is hidden there. */}
+        {typeof window !== 'undefined' && !window.location.pathname.startsWith('/dashboard')
+          ? null
+          : <DashboardSplineBackground />}
         {children}
         <SessionControls />
       </body>
