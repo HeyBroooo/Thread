@@ -339,6 +339,175 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+   Landing: deletes the last legacy light surfaces.
+
+   The dark revamp converted the shared chrome, but the landing's own component
+   set (hero, product mocks, feature grid, steps, FAQ, footer chips) still painted
+   opaque white/near-white panels while every ink token had already flipped to
+   #ecfdf5. That combination produced white-on-white text roughly 1:1 in
+   contrast, which is what made the page look broken. Each surface below becomes
+   the same glass used by the rest of the product so the shared scene reads
+   through and the light type stays legible.
+--------------------------------------------------------------------------- */
+
+/* The hero was the largest offender: a solid #eaf1eb band on top of the dark
+   scene, holding near-white headline copy. */
+.hero {
+  background-color: transparent;
+}
+
+.hero-logo {
+  @apply border-white/12 bg-white/[0.06];
+  box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.8);
+}
+
+.hero-stat,
+.landing-page .lp-step-list .step-item:hover,
+.lp-feature-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-stat {
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Product mocks (canvas, showcase, chat, impact) -------------------------- */
+
+.lp-mock {
+  @apply border-white/10 bg-white/[0.06] backdrop-blur-xl;
+  box-shadow: 0 32px 64px -34px rgba(0, 0, 0, 0.85);
+}
+
+.lp-mock-bar,
+.lp-showcase-toolbar {
+  @apply border-white/10 bg-white/[0.05];
+}
+
+.lp-mock-canvas .lp-mock-body,
+.lp-showcase-graph {
+  background: radial-gradient(circle at 30% 20%, rgba(52, 211, 153, 0.1), transparent 55%), rgba(3, 17, 13, 0.35);
+}
+
+.lp-mock-chat .lp-mock-body,
+.lp-mock-impact .lp-mock-body {
+  background: rgba(3, 17, 13, 0.35);
+}
+
+.lp-mock-dots i {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.lp-mock-dots i:first-child {
+  background: #e08884;
+}
+
+.lp-mock-dots i:nth-child(2) {
+  background: #e0c07a;
+}
+
+.lp-mock-dots i:last-child {
+  background: #7fc39d;
+}
+
+.lp-graph-edge {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.lp-showcase-search,
+.lp-chip-mini {
+  @apply border-white/12 bg-white/[0.07] text-slate-200;
+}
+
+/* Emerald fills keep dark ink: white on #34d399 is only ~1.9:1. */
+.lp-chip-mini.is-active,
+.lp-chat-q,
+/* globals.css pins the navbar CTA to #fff at 0,2,0 — match that specificity. */
+.landing-page .lp-nav-cta {
+  color: var(--lime-ink);
+}
+
+.lp-chip-mini.is-active {
+  box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.9);
+}
+
+.lp-chat-a {
+  @apply border-white/10 bg-white/[0.06];
+}
+
+.lp-chat-input {
+  @apply border-white/12 bg-white/[0.04];
+}
+
+.lp-chat-validated {
+  color: var(--accent-muted);
+}
+
+.lp-chat-cites .lp-cite,
+.lp-cite {
+  border-color: rgba(52, 211, 153, 0.28);
+}
+
+.lp-impact-row {
+  @apply border-white/10 bg-white/[0.06];
+}
+
+.lp-impact-row.is-indirect {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Feature grid, how-it-works steps, FAQ and footer chips ------------------ */
+
+.lp-feature-card {
+  @apply border-white/10 bg-white/[0.06] backdrop-blur-xl;
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.8);
+}
+
+.lp-feature-card::after {
+  background: radial-gradient(120% 90% at 100% 0%, rgba(52, 211, 153, 0.16), transparent 60%);
+}
+
+.lp-feature-card:hover,
+.landing-page .lp-step-list .step-item:hover {
+  border-color: rgba(52, 211, 153, 0.32);
+}
+
+.landing-page .lp-step-list .step-item {
+  @apply border-white/10 bg-white/[0.06] backdrop-blur-xl;
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.8);
+}
+
+.landing-page .lp-step-list .step-number {
+  border-color: rgba(52, 211, 153, 0.28);
+}
+
+.lp-faq {
+  @apply border-white/10 bg-white/[0.06] backdrop-blur-xl;
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.8);
+}
+
+.lp-faq-item {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.lp-faq-item.is-open {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lp-footer-social {
+  @apply border-white/12 bg-white/[0.07] text-slate-100;
+}
+
+.lp-footer-social:hover {
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+@media (max-width: 680px) {
+  .hero-stat {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Typography
 --------------------------------------------------------------------------- */
 
