@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowRight, GitPullRequest, Map, MessagesSquare, Network, ShieldCheck, Zap, Layers, FolderOpen, FileCode, BarChart3, Search, TrendingUp, MessageSquare } from 'lucide-react';
 import { api, type RepositoryPayload } from '@/lib/api';
-import { DashboardSplineBackground } from '@/components/DashboardSplineBackground';
 import { FloatingNavbar } from '@/components/ui/floating-navbar';
 import { ConnectCard } from '@/components/ui/connect-card';
 import { RepoCard } from '@/components/ui/repo-card';
@@ -141,9 +140,7 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard">
-      {/* Full-window non-scrollable 3D Spline backdrop (build-set). */}
-      <DashboardSplineBackground />
-
+      {/* Spline background removed for cleaner UI */}
       <FloatingNavbar />
 
       <header className="dashboard-hero">

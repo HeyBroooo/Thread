@@ -16,7 +16,7 @@ export function SectionHeading({ eyebrow, title, sub, align = 'center', classNam
   return (
     <div
       className={cn(
-        'mx-auto mb-10 flex max-w-3xl flex-col gap-4',
+        'mx-auto mb-12 flex max-w-4xl flex-col gap-5',
         align === 'center' ? 'items-center text-center' : 'items-start text-left',
         className,
       )}
@@ -26,7 +26,7 @@ export function SectionHeading({ eyebrow, title, sub, align = 'center', classNam
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-60px' }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="font-mono text-[13px] font-semibold uppercase tracking-[0.16em] text-primary"
+        className="font-mono text-[12px] font-bold uppercase tracking-[0.2em] text-primary"
       >
         {eyebrow}
       </motion.span>
@@ -35,7 +35,7 @@ export function SectionHeading({ eyebrow, title, sub, align = 'center', classNam
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-60px' }}
         transition={{ duration: 0.5, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
-        className="m-0 text-[clamp(30px,4.2vw,50px)] font-bold leading-[1.06] tracking-[-0.04em] text-foreground"
+        className="m-0 text-[clamp(32px,4.5vw,52px)] font-extrabold leading-[1.05] tracking-[-0.045em] text-foreground"
       >
         {title}
       </motion.h2>
@@ -45,7 +45,7 @@ export function SectionHeading({ eyebrow, title, sub, align = 'center', classNam
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
           transition={{ duration: 0.5, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
-          className="m-0 max-w-xl text-[16px] leading-relaxed text-muted-foreground"
+          className="m-0 max-w-2xl text-[17px] leading-relaxed text-muted-foreground"
         >
           {sub}
         </motion.p>

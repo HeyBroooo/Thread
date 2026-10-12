@@ -3,14 +3,14 @@ import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 export const alertVariants = cva(
-  'ui-alert relative w-full rounded-lg border px-4 py-3 text-sm grid gap-1',
+  'ui-alert relative w-full rounded-xl border-2 px-4 py-3.5 text-sm grid gap-1.5 shadow-sm',
   {
     variants: {
       variant: {
-        default: 'ui-alert-default bg-card text-card-foreground border-border',
-        destructive: 'ui-alert-destructive border-destructive/30 bg-destructive/10 text-destructive',
-        success: 'ui-alert-success border-emerald-300/60 bg-emerald-50 text-emerald-900',
-        warning: 'ui-alert-warning border-amber-300/60 bg-amber-50 text-amber-900',
+        default: 'ui-alert-default bg-card text-card-foreground border-border/80',
+        destructive: 'ui-alert-destructive border-destructive/40 bg-destructive/10 text-destructive',
+        success: 'ui-alert-success border-emerald-400/60 bg-emerald-50 text-emerald-900',
+        warning: 'ui-alert-warning border-amber-400/60 bg-amber-50 text-amber-900',
       },
     },
     defaultVariants: { variant: 'default' },

@@ -8,7 +8,7 @@ export const Label = forwardRef<HTMLLabelElement, LabelHTMLAttributes<HTMLLabelE
         ref={ref}
         data-slot="label"
         className={cn(
-          'ui-label flex items-center gap-2 text-sm font-medium leading-none select-none',
+          'ui-label flex items-center gap-2 text-sm font-semibold leading-none select-none tracking-tight',
           'peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
           className,
         )}

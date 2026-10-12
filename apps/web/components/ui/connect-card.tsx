@@ -76,43 +76,45 @@ export function ConnectCard() {
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       className="connect-shell"
     >
-      <Card className="lp-connect-card w-full border-border shadow-md">
-        <CardHeader className="gap-1.5 pb-4">
-          <CardTitle className="text-[20px] font-bold tracking-[-0.02em]">
+      <Card className="lp-connect-card w-full border-border/80 shadow-lg">
+        <CardHeader className="gap-2 pb-5">
+          <CardTitle className="text-[22px] font-bold tracking-[-0.025em]">
             Connect a repository
           </CardTitle>
-          <CardDescription className="text-[14px] leading-relaxed">
+          <CardDescription className="text-[15px] leading-relaxed">
             Paste a GitHub URL — we clone it and build the graph. No browser crawl, ever.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="pt-0">
-          <form onSubmit={connect} className="flex flex-col gap-3.5">
+          <form onSubmit={connect} className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="flex min-w-0 flex-[2_1_240px] flex-col gap-1.5">
-                <Label htmlFor="connect-repo-url">Repository URL</Label>
+              <div className="flex min-w-0 flex-[2_1_240px] flex-col gap-2">
+                <Label htmlFor="connect-repo-url" className="text-sm font-semibold">Repository URL</Label>
                 <Input
                   id="connect-repo-url"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                   placeholder="https://github.com/HeyBroooo/cognimail"
                   autoComplete="off"
+                  className="h-11"
                 />
               </div>
-              <div className="flex min-w-0 flex-[1_1_160px] flex-col gap-1.5">
-                <Label htmlFor="connect-branch">Branch (optional)</Label>
+              <div className="flex min-w-0 flex-[1_1_160px] flex-col gap-2">
+                <Label htmlFor="connect-branch" className="text-sm font-semibold">Branch (optional)</Label>
                 <Input
                   id="connect-branch"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
                   placeholder="Use repository default"
                   autoComplete="off"
+                  className="h-11"
                 />
               </div>
               <Button
                 type="submit"
                 disabled={connecting}
-                className="h-10 shrink-0 px-5 font-semibold shadow-sm"
+                className="h-11 shrink-0 px-6 font-semibold shadow-md"
               >
                 {connecting ? (
                   <>

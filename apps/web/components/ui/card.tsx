@@ -5,7 +5,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       data-slot="card"
-      className={cn('ui-card bg-card text-card-foreground flex flex-col rounded-xl border border-border shadow-sm', className)}
+      className={cn('ui-card bg-card text-card-foreground flex flex-col rounded-2xl border border-border/80 shadow-md', className)}
       {...props}
     />
   );

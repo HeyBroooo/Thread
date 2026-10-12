@@ -95,30 +95,30 @@ export function FloatingNavbar({ className }: { className?: string }) {
       className={cn(
         'floating-nav',
         'fixed inset-x-0 top-0 z-50',
-        'flex items-center justify-between gap-4',
-        'px-5 py-3 sm:px-8',
+        'flex items-center justify-between gap-6',
+        'px-6 py-4 sm:px-8',
         className,
       )}
     >
       <Link href="/" className="lp-nav-brand">
-        <Image src="/logo-128.png" alt="" width={28} height={28} priority />
-        <span>Codebase Intelligence</span>
+        <Image src="/logo-128.png" alt="" width={32} height={32} priority className="rounded-lg shadow-sm" />
+        <span className="font-bold">Codebase Intelligence</span>
       </Link>
 
       <nav className="lp-nav-links" aria-label="Primary">
         {NAV_ITEMS.map((item) => (
-          <a key={item.name} href={item.link}>
+          <a key={item.name} href={item.link} className="font-medium">
             {item.name}
           </a>
         ))}
       </nav>
 
       {authenticated ? (
-        <Link href="#repos" className="lp-nav-cta">
+        <Link href="#repos" className="lp-nav-cta font-bold">
           Dashboard
         </Link>
       ) : (
-        <Link href="#connect" className="lp-nav-cta">
+        <Link href="#connect" className="lp-nav-cta font-bold">
           Get started
         </Link>
       )}
