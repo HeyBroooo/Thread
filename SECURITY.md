@@ -60,3 +60,6 @@ The real Google account consent/callback was not completed because browser acces
 accounts.google.com was declined. Tests exercise the callback with mocked Supabase token
 responses. A successful dependency audit reports known advisories only; it is not a claim
 of a complete penetration test or that the application has no unknown vulnerabilities.
+
+
+GitHub repository connection uses the App installation flow followed by OAuth with state and PKCE. Signed HttpOnly state binds callbacks to the current Google session, workspace, repository and branch. An installation ID alone is never trusted: GitHub's user/installation repository intersection is checked before linking and again before credential minting. Installation tokens are limited by `repository_ids` and explicit permissions; user read access cannot gain bot writes. Manual PAT endpoints return 410 and shared environment tokens are ignored. OAuth access and refresh credentials are AES-GCM encrypted per workspace, held server-side, and refreshed without exposing them to the browser. Installation or user revocation fails closed on subsequent GitHub operations. Automatic reviews are gated in manual, polling, webhook, and execution paths. App connection refuses broader declared repository permissions than Contents read, Pull requests write, Issues write and Metadata read.

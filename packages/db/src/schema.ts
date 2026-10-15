@@ -295,9 +295,17 @@ CREATE TABLE IF NOT EXISTS user_github_credentials (
  saved_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `;
+const M3 = `
+CREATE TABLE IF NOT EXISTS github_user_authorizations (
+ organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+ encrypted_authorization TEXT NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+`;
 export const MIGRATIONS: Migration[] = [
  { version: 1, name: 'initial_schema', sql: M1 },
  { version: 2, name: 'user_workspaces_and_sessions', sql: M2 },
+ { version: 3, name: 'github_app_user_authorization', sql: M3 },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

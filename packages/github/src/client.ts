@@ -167,7 +167,7 @@ export class GitHubClient implements GitHubApi {
     if (init.method && init.method !== 'GET' && !this.canComment) {
       throw new AppError(
         'GITHUB_WRITE_DENIED',
-        'This server has no GitHub credential that may post comments. Install the GitHub App on the repository (pull_requests: write) or set GITHUB_TOKEN in .env.',
+        'Enable GitHub reviews and approve access to this repository through the GitHub App.',
         403,
       );
     }

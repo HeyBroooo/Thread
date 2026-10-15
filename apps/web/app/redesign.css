@@ -2759,3 +2759,146 @@ html {
     flex-direction: column;
   }
 }
+.github-approval {
+  margin-top: 24px;
+  padding: 28px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e5ebe7;
+  box-shadow: 0 4px 16px #183b3405;
+}
+.github-approval-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.github-approval-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #e9f3ed;
+  color: #365c47;
+}
+.github-approval-eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: #637c6b;
+  font-weight: 600;
+}
+.github-approval h3 {
+  margin: 5px 0 0;
+  font-size: 20px;
+  letter-spacing: -0.5px;
+  color: #203f32;
+}
+.github-approval > p {
+  max-width: 620px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #637369;
+  margin: 20px 0;
+}
+.github-approval ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  list-style: none;
+  margin: 24px 0;
+  padding: 0;
+}
+.github-approval li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #536c5b;
+}
+.github-approval li > span {
+  width: 22px;
+  height: 22px;
+  background: #edf2ed;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+.github-approval-scope {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 11px;
+  color: #627568;
+  line-height: 1.9;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f7f9f5;
+  margin-bottom: 22px;
+}
+.github-approval-scope svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.github-approval > small {
+  display: block;
+  margin-top: 14px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #6e7d73;
+}
+.github-approval .github-approval-error {
+  color: #a53f35;
+}
+.pr-activation {
+  max-width: 850px;
+  padding-top: 44px;
+}
+.pr-activation .page-head {
+  margin-bottom: 24px;
+}
+.pr-activation .page-title {
+  margin-top: 12px;
+  max-width: 560px;
+}
+.pr-activation .page-sub {
+  max-width: 560px;
+}
+.pr-activation-note {
+  font-size: 12px;
+  color: #6e7d73;
+  line-height: 1.8;
+  margin: 22px 0;
+}
+.connect-privacy {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #6e7d73;
+  margin: 0;
+}
+.connect-progress {
+  font-size: 12px;
+  color: #38634c;
+  margin-top: 18px;
+}
+@media (max-width: 600px) {
+  .github-approval {
+    padding: 20px;
+  }
+  .github-approval h3 {
+    font-size: 18px;
+  }
+  .github-approval ol {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .github-approval > .ui-button {
+    width: 100%;
+  }
+  .pr-activation {
+    padding-top: 24px;
+  }
+}

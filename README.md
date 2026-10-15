@@ -185,8 +185,7 @@ gets its own workspace; client organization headers cannot select a different ac
 Previous shared repositories are preserved but are not automatically assigned to any user.
 
 Public GitHub repositories can be connected directly. For private repositories, connect
-your own GitHub token in the repository connection panel. Shared server tokens and
-unlinked GitHub App installations cannot grant users access to private repositories.
+the GitHub App when connecting a private repository. Public repositories connect without installation; PR reviews require App approval. Users never paste a token. Shared credentials and unverified installation IDs cannot grant private repository access.
 Local checkout paths are available through the CLI, not the web API.
 
 See [SECURITY.md](SECURITY.md) for the implemented boundaries and deployment checks.
@@ -194,3 +193,17 @@ See [SECURITY.md](SECURITY.md) for the implemented boundaries and deployment che
 ### Production Google redirect
 
 Set the API `APP_URL` to your public web origin. In Supabase Authentication > URL Configuration, add the exact callback `https://thread-orpin-zeta.vercel.app/api/auth/supabase/callback` to Redirect URLs (and `http://localhost:3000/api/auth/supabase/callback` for local development). The callback URL is stable; the intended workspace destination stays in the signed, HttpOnly PKCE cookie. Root-level OAuth callbacks are forwarded to the same verifier-protected endpoint. Start a fresh Google sign-in after changing deployment configuration; a callback without the original browser's verifier cookie cannot authenticate.
+
+### GitHub App setup (Render backend + Vercel frontend)
+
+Set `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET` on the **Render backend**. Keep them out of Vercel client bundles and all `NEXT_PUBLIC_` variables. The API `APP_URL` must be the Vercel public origin, not the Render backend origin. Apply database migrations (`npm run migrate`) before serving requests; version 3 stores encrypted GitHub authorizations.
+
+In the archthread GitHub App registration:
+
+- Callback URL: `https://thread-orpin-zeta.vercel.app/api/github/connect/callback`.
+- Setup URL: `https://thread-orpin-zeta.vercel.app/api/github/connect/setup`. Enable redirect after installation updates, and leave **Request user authorization (OAuth) during installation** unchecked. The API performs a separate PKCE authorization bound to the signed-in session.
+- Repository permissions: **Contents: read**, **Pull requests: write**, **Issues: write**, and automatic **Metadata: read**. Disable other repository, organization, and account permissions. The connection endpoint refuses to send users to an App requesting broader repository permissions.
+- Webhook: `https://thread-orpin-zeta.vercel.app/api/github/webhook`, with the configured webhook secret; subscribe to **Pull request** events. Existing installations must approve updated permissions.
+- For local OAuth testing, add `http://localhost:3000/api/github/connect/callback` as a callback and temporarily use `http://localhost:3000/api/github/connect/setup` as the Setup URL. Restore the production Setup URL afterward.
+
+Users connect public repositories immediately. For a private or inaccessible repository, **Continue with GitHub** opens installation and repository selection, then user authorization. The API checks the user's selected repositories before saving the authorization and returns to the original repository/branch. Organization approval requests show a pending state. PR review execution, polling, and webhooks require verified write access; readers cannot escalate to bot writes. Server-issued installation credentials are restricted to one verified repository and the permissions needed by this app. OAuth access and refresh credentials remain encrypted on the API host and refresh without browser token entry.

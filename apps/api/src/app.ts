@@ -46,7 +46,7 @@ import {
 import { jobQueue, type JobRecord } from './queue.js';
 import { githubClientFor, resolveCloneCredential, resolveGitHubAccess } from './github.js';
 import { readProjectManifest } from './manifests.js';
-import { clearToken, saveToken, tokenStatus } from './credentials.js';
+import { registerGitHubConnectRoutes } from './githubConnect.js';
 import {
   claimForScheduling,
   listMemoryFindings,
@@ -160,6 +160,7 @@ export function createApp(): Hono<AppContext> {
   app.get('/health', (c) => c.json({ ok: true }));
 
   registerAuthRoutes(app);
+  registerGitHubConnectRoutes(app);
   registerRepositoryRoutes(app);
   registerGraphRoutes(app);
   registerSearchRoutes(app);
@@ -463,10 +464,10 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     let cloned = null;
 
     if (wantsClone) {
-      // App installation when it covers the repo, otherwise the saved token —
+      // Use the verified user's selected GitHub App repository —
       // that is what makes private repositories cloneable without an App.
       const cred = await resolveCloneCredential({ owner, name, organizationId: orgIdOf(c) });
-      if (!cred.token) log.warn('clone.no_credential', { owner, name, note: 'public repos clone anonymously; private ones need an App installation or a token' });
+      if (!cred.token) log.warn('clone.no_credential', { owner, name, note: 'public repositories clone anonymously' });
       cloned = await cloneOrPull({ owner, name, branch, token: cred.token, existingPath: null, baseDir: resolve(process.env.CBI_CHECKOUT_DIR ?? '.cbi/checkouts', orgIdOf(c), uuid()) });
       checkoutPath = cloned.checkoutPath;
       branch = branch ?? cloned.branch;
@@ -523,9 +524,6 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       (body.owner && body.name ? { owner: body.owner, name: body.name, branch: null } : null);
     if (!parsed || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/.test(parsed.owner) || !/^[a-zA-Z0-9_.-]{1,100}$/.test(parsed.name) || ['.','..'].includes(parsed.name)) throw Errors.badRequest('Provide a valid GitHub repository.');
 
-    const config = getConfig();
-    const appConfigured = Boolean(config.github.appId && config.github.privateKey);
-
     // Always 200: resolution never throws — it reports the best credential it
     // could find plus exactly what is blocking comments.
     const access = await resolveGitHubAccess(parsed.owner, parsed.name, orgIdOf(c));
@@ -535,6 +533,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       name: parsed.name,
       appConfigured: cap.appConfigured,
       accessible: cap.repoAccessible,
+      authorizationRequired: cap.authorizationRequired,
       requiresInstall: !cap.canComment,
       canComment: cap.canComment,
       mode: cap.mode,
@@ -554,27 +553,9 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     });
   });
 
-  /** Which GitHub credential the server is using (never returns the secret). */
-  app.get('/api/github/credentials', async (c) => c.json(await tokenStatus(orgIdOf(c))));
-
-  /**
-   * Save a personal access token so reviews can be posted immediately, for
-   * public *and* private repositories, without waiting on App settings.
-   */
-  app.post('/api/github/credentials', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { token?: string };
-    const token = typeof body.token === 'string' ? body.token.trim() : '';
-    if (!token) {
-      await clearToken(orgIdOf(c));
-      return c.json({ ok: true, ...await tokenStatus(orgIdOf(c)) });
-    }
-    try {
-      const { login, scopes } = await saveToken(token, orgIdOf(c));
-      return c.json({ ...await tokenStatus(orgIdOf(c)), ok: true, login, scopes });
-    } catch (e) {
-      throw Errors.badRequest(e instanceof Error ? e.message : 'Could not validate that token.');
-    }
-  });
+  // Manual tokens are retired; only browser-authorized GitHub App access is accepted.
+  app.get('/api/github/credentials', c => c.json({ error: { code: 'TOKEN_FLOW_RETIRED', message: 'Connect through the GitHub App.' } }, 410));
+  app.post('/api/github/credentials', c => c.json({ error: { code: 'TOKEN_FLOW_RETIRED', message: 'Connect through the GitHub App.' } }, 410));
 
   app.get('/api/repositories', async (c) => {
     await ensureBootstrapIfNeeded();
@@ -1387,6 +1368,7 @@ function registerPrRoutes(app: Hono<AppContext>): void {
     if (body.checkoutPath) throw Errors.badRequest('Local checkout paths are not accepted by the web API.');
     if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw Errors.badRequest('Invalid pull request number.');
     const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
+    if (!access.capability.canComment) return c.json({ error: { code: 'GITHUB_ACCESS_REQUIRED', message: 'Enable GitHub reviews for this repository before starting a review.' } }, 403);
 
     let title = `PR #${prNumber}`;
     let baseSha = body.baseSha ?? null;
@@ -1509,6 +1491,8 @@ function registerWebhookRoutes(app: Hono<AppContext>): void {
         const repos = await listAllRepos();
         const matches = repos.filter((r) => r.owner.toLowerCase() === event.owner!.toLowerCase() && r.name.toLowerCase() === event.repo!.toLowerCase());
         for (const match of matches) {
+        const access = await resolveGitHubAccess(match.owner, match.name, match.organizationId);
+        if (!access.capability.canComment) continue;
 
         // Gate on the branch this repository tracks, so only PRs aimed at it
         // are reviewed and commented on.
@@ -1806,6 +1790,7 @@ function registerJobHandlers(): void {
 
     try {
       const access = await resolveGitHubAccess(job.payload['owner'] as string, job.payload['repo'] as string, repo.organizationId);
+      if (!access.capability.canComment) throw new Error('GitHub review permissions are no longer available. Reconnect this repository on GitHub.');
       const result = await runReviewJob({
         repositoryId,
         owner: job.payload['owner'] as string,

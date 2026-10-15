@@ -29,7 +29,7 @@ function key(): Buffer {
     .update(`github-credential-encryption:${secret}`)
     .digest();
 }
-function encrypt(token: string, workspace: string): string {
+export function encrypt(token: string, workspace: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
   cipher.setAAD(Buffer.from(workspace));
@@ -41,7 +41,7 @@ function encrypt(token: string, workspace: string): string {
     .map((b) => b.toString("base64url"))
     .join(".");
 }
-function decrypt(value: string, workspace: string): string {
+export function decrypt(value: string, workspace: string): string {
   const [iv, tag, data] = value
     .split(".")
     .map((s) => Buffer.from(s, "base64url"));

@@ -75,6 +75,7 @@ async function syncRepository(repo: RepoRecord): Promise<{ checked: number; enqu
   // The base branch is whatever this repository tracks in the site config.
   const target = repo.branch || repo.defaultBranch;
   const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
+  if (!access.capability.canComment) return { checked: 0, enqueued: 0 };
   const prs = await access.client.listPullRequests(repo.owner, repo.name, 'open');
 
   let enqueued = 0;
