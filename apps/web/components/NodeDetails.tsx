@@ -24,18 +24,18 @@ const FLOW_EDGES = new Set([
 
 /** Per-edge-type tint so flow direction is readable at a glance. */
 const EDGE_TONES: Record<string, string> = {
-  CALLS: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
-  CALLS_API: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
-  RENDERS: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
-  NAVIGATES_TO: 'border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-200',
-  IMPORTS: 'border-slate-400/30 bg-slate-400/10 text-slate-200',
+  CALLS: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-700',
+  CALLS_API: 'border-sky-400/30 bg-sky-400/10 text-sky-700',
+  RENDERS: 'border-violet-400/30 bg-violet-400/10 text-violet-700',
+  NAVIGATES_TO: 'border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-700',
+  IMPORTS: 'border-slate-400/30 bg-slate-400/10 text-slate-600',
 };
 
-const EDGE_TONE_FALLBACK = 'border-white/15 bg-white/10 text-slate-200';
+const EDGE_TONE_FALLBACK = 'border-slate-200 bg-slate-50 text-slate-600';
 
-const BLOCK = 'rounded-lg border border-white/10 bg-white/[0.05] p-3';
+const BLOCK = 'rounded-lg border border-slate-200 bg-slate-50 p-3';
 const BLOCK_LABEL =
-  'text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-400';
+  'text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-500';
 
 export function NodeDetails({
   repositoryId,
@@ -95,7 +95,7 @@ export function NodeDetails({
 
   return (
     <aside
-      className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto border-l border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain border-l border-slate-200 bg-white p-4 backdrop-blur-xl"
       aria-label="Node details"
     >
       <div ref={contentRef} className="flex flex-col gap-3">
@@ -120,19 +120,19 @@ export function NodeDetails({
 function EmptyState() {
   return (
     <>
-      <h3 className="m-0 text-[15px] font-semibold text-white">Node details</h3>
-      <p className="m-0 text-[12.5px] leading-relaxed text-slate-400">
+      <h3 className="m-0 text-[15px] font-semibold text-slate-800">Node details</h3>
+      <p className="m-0 text-[12.5px] leading-relaxed text-slate-500">
         Select a node on the canvas to inspect its relationships and source evidence.
       </p>
       <div className={`${BLOCK} flex flex-col gap-2`}>
         <Hint icon={<MousePointer2 size={13} aria-hidden="true" />}>
-          <strong className="font-semibold text-slate-200">Click</strong> a node to inspect
+          <strong className="font-semibold text-slate-600">Click</strong> a node to inspect
         </Hint>
         <Hint icon={<Move size={13} aria-hidden="true" />}>
-          <strong className="font-semibold text-slate-200">Drag</strong> to pan · scroll to zoom
+          <strong className="font-semibold text-slate-600">Drag</strong> to pan · scroll to zoom
         </Hint>
         <Hint icon={<FolderTree size={13} aria-hidden="true" />}>
-          In Tree layout, <strong className="font-semibold text-slate-200">click folders</strong> to
+          In Tree layout, <strong className="font-semibold text-slate-600">click folders</strong> to
           expand
         </Hint>
       </div>
@@ -142,8 +142,8 @@ function EmptyState() {
 
 function Hint({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 text-[12px] leading-snug text-slate-400">
-      <span className="shrink-0 text-emerald-300">{icon}</span>
+    <div className="flex items-center gap-2 text-[12px] leading-snug text-slate-500">
+      <span className="shrink-0 text-emerald-700">{icon}</span>
       <span className="min-w-0">{children}</span>
     </div>
   );
@@ -183,7 +183,7 @@ function NodeDetailBody({
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h3
-            className="m-0 truncate text-[14px] font-semibold leading-snug text-white"
+            className="m-0 truncate text-[14px] font-semibold leading-snug text-slate-800"
             title={node.qualifiedName || node.name}
           >
             {node.name}
@@ -200,7 +200,7 @@ function NodeDetailBody({
           <div className={BLOCK_LABEL}>Path</div>
           {/* `break-all` + `min-w-0` is what keeps long monorepo paths inside the
               320px rail instead of overflowing the card. */}
-          <code className="mt-1.5 block min-w-0 break-all font-mono text-[11.5px] leading-relaxed text-emerald-300">
+          <code className="mt-1.5 block min-w-0 break-all font-mono text-[11.5px] leading-relaxed text-emerald-700">
             {node.filePath}
             {node.startLine ? `:${node.startLine}–${node.endLine ?? node.startLine}` : ''}
           </code>
@@ -214,8 +214,8 @@ function NodeDetailBody({
           <dl className="m-0 mt-1.5 grid gap-1.5">
             {properties.slice(0, 8).map(([key, value]) => (
               <div key={key} className="flex min-w-0 items-baseline gap-2">
-                <dt className="shrink-0 text-[11.5px] text-slate-400">{key}</dt>
-                <dd className="m-0 min-w-0 break-all text-right font-mono text-[11.5px] text-slate-200">
+                <dt className="shrink-0 text-[11.5px] text-slate-500">{key}</dt>
+                <dd className="m-0 min-w-0 break-all text-right font-mono text-[11.5px] text-slate-600">
                   {String(value)}
                 </dd>
               </div>
@@ -228,7 +228,7 @@ function NodeDetailBody({
       <div className={BLOCK}>
         <div className={BLOCK_LABEL}>Relationships ({calls.length})</div>
         {calls.length === 0 ? (
-          <p className="m-0 mt-1.5 text-[12px] text-slate-400">No flow relationships recorded.</p>
+          <p className="m-0 mt-1.5 text-[12px] text-slate-500">No flow relationships recorded.</p>
         ) : (
           <ul className="m-0 mt-1 list-none p-0">
             {calls.slice(0, 25).map((edge) => {
@@ -279,10 +279,10 @@ function NodeDetailBody({
       {detail.evidence && (
         <div className={BLOCK}>
           <div className={BLOCK_LABEL}>Source</div>
-          <code className="mt-1.5 block min-w-0 break-all font-mono text-[11px] text-emerald-300">
+          <code className="mt-1.5 block min-w-0 break-all font-mono text-[11px] text-emerald-700">
             {detail.evidence.filePath}:{detail.evidence.startLine}–{detail.evidence.endLine}
           </code>
-          <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-white/10 bg-black/30 p-2.5 font-mono text-[11px] leading-[1.55] text-slate-200">
+          <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-slate-200 bg-black/30 p-2.5 font-mono text-[11px] leading-[1.55] text-slate-600">
             {detail.evidence.snippet
               .split('\n')
               .map((line, i) => `${String(detail.evidence!.startLine + i).padStart(4, ' ')}  ${line}`)

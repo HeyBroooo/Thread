@@ -25,7 +25,7 @@ const DEFAULT_ITEMS: FaqItem[] = [
   },
   {
     q: 'Where does my code go?',
-    a: 'The API clones into `.cbi/checkouts` unless you point it at an existing checkout path. Private repositories need the GitHub App installed; approval and merge always stay on GitHub.',
+    a: 'Repositories are cloned into isolated workspace directories. Private repositories use the GitHub token you connect to your own account; approval and merge stay on GitHub.',
   },
   {
     q: 'Which languages are supported?',

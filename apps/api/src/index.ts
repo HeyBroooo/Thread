@@ -11,6 +11,7 @@ const log = createLogger({ component: 'api.server' });
 
 async function bootstrapDatabase(): Promise<void> {
   if (!hasDatabase()) {
+    if (getConfig().nodeEnv === 'production') throw new Error('PostgreSQL is required in production for isolated workspaces and revocable sessions.');
     log.info('api.database_disabled', { note: 'DATABASE_URL not set — using in-memory graph and repository registry.' });
     return;
   }
@@ -20,6 +21,7 @@ async function bootstrapDatabase(): Promise<void> {
     setDatabaseAvailability(true);
     log.info('api.database_ready', { applied });
   } catch (e) {
+    if (getConfig().nodeEnv === 'production') throw e;
     setDatabaseAvailability(false);
     log.error('api.database_bootstrap_failed', {
       message: e instanceof Error ? e.message : String(e),

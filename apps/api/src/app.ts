@@ -1,9 +1,10 @@
+import { authenticatedSession, issueGoogleSession, revokeSession, workspaceIdFor, type UserSession } from './identity.js';
+import { resolve, dirname } from 'node:path';
+import { bodyLimit } from 'hono/body-limit';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { existsSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
-import { createElement } from 'react';
-import { render } from '@react-email/render';
 import { AppError, Errors, createLogger, getConfig, isAppError, uuid, type EdgeType, type GraphEdge, type GraphNode, type NodeType } from '@cbi/shared';
 import {
   cloneOrPull,
@@ -19,16 +20,11 @@ import { runReviewJob, REVIEW_VERSION } from '@cbi/pr-reviewer';
 import * as db from '@cbi/db';
 import {
   clearSessionCookie,
-  createIdentitySessionToken,
   createSignedToken,
-  createSessionToken,
   sessionCookie,
   sessionTokenFromCookie,
-  verifyConfiguredPassword,
-  verifySessionClaims,
   verifySignedToken,
 } from './auth.js';
-import { MagicLinkEmail } from './MagicLinkEmail.js';
 import {
   aiProvider,
   chatService,
@@ -39,6 +35,8 @@ import {
   getRepo,
   graphStore,
   listRepos,
+  listAllRepos,
+  getRepoInternal,
   sourceRegistry,
   updateRepo,
   updateRepoBranch,
@@ -64,6 +62,7 @@ import {
 
 const log = createLogger({ component: 'api' });
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const accountWindows = new Map<string, {count:number; resetAt:number}>();
 const LOGIN_ATTEMPT_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60_000;
 const SUPABASE_STATE_COOKIE = 'cbi_supabase_oauth_state';
@@ -78,6 +77,8 @@ class SupabaseAuthError extends Error {
 export interface AppContext {
   Variables: {
     requestId: string;
+    session: UserSession;
+    organizationId: string;
   };
 }
 
@@ -103,59 +104,39 @@ export function createApp(): Hono<AppContext> {
     '/api/*',
     cors({
       origin: (origin) => (origin === new URL(getConfig().appUrl).origin ? origin : ''),
-      allowHeaders: ['content-type', 'x-request-id', 'x-organization-id'],
+      allowHeaders: ['content-type', 'x-request-id'],
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
     }),
   );
 
+  app.use('/api/*', bodyLimit({ maxSize: 1_048_576 }));
   app.use('/api/*', async (c, next) => {
     const path = new URL(c.req.url).pathname;
-    const publicRoute =
-      c.req.method === 'OPTIONS' ||
-      path === '/api/auth/session' ||
-      path === '/api/auth/logout' ||
-      path === '/api/auth/entry' ||
-      path === '/api/auth/login' ||
-      path === '/api/auth/magic-link' ||
-      path === '/api/auth/magic/verify' ||
-      path === '/api/auth/google/start' ||
-      path === '/api/auth/supabase/callback' ||
-      path === '/api/github/webhook' ||
-      path === '/api/webhooks/github';
-    if (publicRoute) return next();
-
-    const sessionSecret = process.env.SESSION_SECRET;
-    if (!authIsConfigured() || !sessionSecret) {
-      return c.json(
-        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
-        503,
-      );
-    }
-
-    const claims = verifySessionClaims(
-      sessionTokenFromCookie(c.req.header('cookie')),
-      sessionSecret,
-    );
-    if (
-      claims?.username !== (process.env.ADMIN_USERNAME || 'Admin') ||
-      claims.entryVerified !== true ||
-      !claims.email
-    ) {
-      return c.json(
-        {
-          error: {
-            code: claims?.email ? 'ENTRY_PASSWORD_REQUIRED' : 'AUTH_REQUIRED',
-            message: claims?.email ? 'Enter the workspace password to continue.' : 'Sign in to access this application.',
-          },
-        },
-        401,
-      );
-    }
-
-    const origin = c.req.header('origin');
-    if (origin && !isAllowedBrowserOrigin(origin)) {
+    c.header('Cache-Control', 'no-store');
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('Referrer-Policy', 'no-referrer');
+    const webhook = path === '/api/github/webhook' || path === '/api/webhooks/github';
+    if (c.req.method === 'OPTIONS') return next();
+    // Check every cookie-authenticated mutation, including logout and auth routes.
+    if (!webhook && !['GET', 'HEAD'].includes(c.req.method) &&
+        (!isAllowedBrowserOrigin(c.req.header('origin') ?? '') || c.req.header('sec-fetch-site') === 'cross-site')) {
       return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
+    }
+    const publicRoute = webhook || ['/api/auth/session', '/api/auth/google/start', '/api/auth/supabase/callback', '/api/auth/logout', '/api/auth/entry', '/api/auth/login', '/api/auth/magic-link', '/api/auth/magic/verify'].includes(path);
+    if (publicRoute) return next();
+    const secret = process.env.SESSION_SECRET;
+    if (!authIsConfigured() || !secret) return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Google sign-in is not configured.' } }, 503);
+    const session = await authenticatedSession(sessionTokenFromCookie(c.req.header('cookie')), secret);
+    if (!session) return c.json({ error: { code: 'AUTH_REQUIRED', message: 'Sign in with Google to continue.' } }, 401);
+    c.set('session', session);
+    c.set('organizationId', workspaceIdFor(session.userId));
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+      const now = Date.now();
+      for (const [key,window] of accountWindows) if (window.resetAt <= now) accountWindows.delete(key);
+      const window = accountWindows.get(session.userId) ?? {count:0, resetAt:now + 60_000};
+      if (window.count >= 30) { c.header('Retry-After', String(Math.ceil((window.resetAt-now)/1000))); return c.json({error:{code:'RATE_LIMITED',message:'Too many requests. Please try again in a minute.'}},429); }
+      window.count++; accountWindows.set(session.userId,window);
     }
     return next();
   });
@@ -176,15 +157,7 @@ export function createApp(): Hono<AppContext> {
 
   app.notFound((c) => c.json(Errors.badRequest(`No route for ${c.req.method} ${new URL(c.req.url).pathname}`, undefined).toBody(c.get('requestId') ?? 'unknown'), 404));
 
-  app.get('/health', (c) =>
-    c.json({
-      ok: true,
-      database: usingDatabase(),
-      ai: Boolean(getConfig().ai.apiKey),
-      github: Boolean(getConfig().github.appId),
-      queue: jobQueue.list().filter((j) => j.status === 'RUNNING').length,
-    }),
-  );
+  app.get('/health', (c) => c.json({ ok: true }));
 
   registerAuthRoutes(app);
   registerRepositoryRoutes(app);
@@ -211,8 +184,7 @@ function isAllowedBrowserOrigin(origin: string): boolean {
 function authIsConfigured(): boolean {
   const sessionSecret = process.env.SESSION_SECRET;
   return Boolean(
-    (process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD_HASH) &&
-      sessionSecret &&
+    sessionSecret &&
       sessionSecret.length >= 32 &&
       process.env.SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -230,6 +202,8 @@ function loginRateLimited(address: string): boolean {
 
 function noteLoginAttempt(address: string): void {
   const now = Date.now();
+  for (const [key, attempt] of loginAttempts) if (attempt.resetAt <= now) loginAttempts.delete(key);
+  if (loginAttempts.size > 10_000) loginAttempts.delete(loginAttempts.keys().next().value!);
   const existing = loginAttempts.get(address);
   const attempt = existing && existing.resetAt > now ? existing : { count: 0, resetAt: now + LOGIN_WINDOW_MS };
   attempt.count++;
@@ -237,7 +211,8 @@ function noteLoginAttempt(address: string): void {
 }
 
 function safeReturnPath(value: string | null | undefined): string {
-  return value?.startsWith('/') && !value.startsWith('//') ? value : '/';
+  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\u0000-\u0020\u007f]/.test(value)) return '/dashboard';
+  try { const target = new URL(value, getConfig().appUrl); return target.origin === new URL(getConfig().appUrl).origin && !target.searchParams.has('code') && !target.pathname.startsWith('/login') && !target.pathname.startsWith('/api/auth') ? value : '/dashboard'; } catch { return '/dashboard'; }
 }
 
 function appUrl(path: string): string {
@@ -277,6 +252,7 @@ async function supabaseAuthRequest<T>(
       'content-type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     const details = await response.json().catch(() => null) as {
@@ -294,77 +270,13 @@ async function supabaseAuthRequest<T>(
   return (await response.json()) as T;
 }
 
-async function generateSupabaseMagicLink(email: string): Promise<string> {
-  const generate = () =>
-    supabaseAuthRequest<{ hashed_token?: unknown; token_hash?: unknown }>('admin/generate_link', {
-      type: 'magiclink',
-      email,
-      options: { redirectTo: appUrl('/api/auth/magic/verify') },
-    });
-  let generated: { hashed_token?: unknown; token_hash?: unknown };
-  try {
-    generated = await generate();
-  } catch (error) {
-    if (!(error instanceof SupabaseAuthError) || !/user not found/i.test(error.message)) throw error;
-    await supabaseAuthRequest('admin/users', {
-      email,
-      email_confirm: true,
-      password: randomBytes(32).toString('hex'),
-    });
-    generated = await generate();
-  }
-  const tokenHash =
-    typeof generated.hashed_token === 'string'
-      ? generated.hashed_token
-      : typeof generated.token_hash === 'string'
-        ? generated.token_hash
-        : null;
-  if (!tokenHash) throw new AppError('SUPABASE_AUTH_FAILED', 'Supabase did not return a magic-link token.', 502);
-  return tokenHash;
-}
-
-async function sendMagicLink(email: string, signInUrl: string): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.AUTH_EMAIL_FROM || 'ArchThread <onboarding@resend.dev>';
-  if (!apiKey) {
-    throw new AppError('MAGIC_LINK_NOT_CONFIGURED', 'Set RESEND_API_KEY on the API service to send sign-in links.', 503);
-  }
-  const html = await render(createElement(MagicLinkEmail, { signInUrl, productName: 'ArchThread' }));
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: 'Your secure sign-in link for ArchThread',
-      html,
-    }),
-  });
-  if (!response.ok) {
-    log.error('auth.magic_link_send_failed', { status: response.status });
-    throw new AppError('MAGIC_LINK_SEND_FAILED', 'Could not send the sign-in email. Please try again.', 502);
-  }
-}
-
 function registerAuthRoutes(app: Hono<AppContext>): void {
-  app.get('/api/auth/session', (c) => {
-    const sessionSecret = process.env.SESSION_SECRET;
-    if (!authIsConfigured() || !sessionSecret) {
-      return c.json(
-        { error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured on the API.' } },
-        503,
-      );
-    }
-    const claims = verifySessionClaims(
-      sessionTokenFromCookie(c.req.header('cookie')),
-      sessionSecret,
-    );
-    const identityAuthenticated = Boolean(claims?.email);
-    const authenticated =
-      claims?.username === (process.env.ADMIN_USERNAME || 'Admin') &&
-      claims.entryVerified === true &&
-      Boolean(claims.email);
-    return c.json({ authenticated, identityAuthenticated, ...(claims?.email ? { email: claims.email } : {}) });
+  app.get('/api/auth/session', async (c) => {
+    const secret = process.env.SESSION_SECRET;
+    c.header('Cache-Control', 'no-store');
+    if (!authIsConfigured() || !secret) return c.json({ authenticated: false, configured: false });
+    const session = await authenticatedSession(sessionTokenFromCookie(c.req.header('cookie')), secret);
+    return c.json({ authenticated: !!session, configured: true, ...(session ? { email: session.email } : {}) });
   });
 
   app.get('/api/auth/google/start', (c) => {
@@ -378,14 +290,15 @@ function registerAuthRoutes(app: Hono<AppContext>): void {
     if (!sessionSecret || sessionSecret.length < 32) {
       return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Session signing is not configured.' } }, 503);
     }
+    const address = requestAddress(c);
+    if (loginRateLimited(address)) return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many sign-in attempts. Please try again later.' } }, 429);
+    noteLoginAttempt(address);
     const state = randomBytes(32).toString('base64url');
     const verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const returnTo = safeReturnPath(c.req.query('from'));
     const signedState = createSignedToken({ purpose: 'supabase-oauth', state, verifier, returnTo }, sessionSecret, 10 * 60);
     const callbackUrl = new URL('/api/auth/supabase/callback', getConfig().appUrl);
-    callbackUrl.searchParams.set('state', state);
-    callbackUrl.searchParams.set('from', returnTo);
     const authorization = new URL(`${config.url}/auth/v1/authorize`);
     authorization.searchParams.set('provider', 'google');
     authorization.searchParams.set('redirect_to', callbackUrl.toString());
@@ -406,14 +319,15 @@ function registerAuthRoutes(app: Hono<AppContext>): void {
     const signedState = sessionSecret ? verifySignedToken(stateCookie, sessionSecret) : null;
     if (
       !sessionSecret ||
-      !state ||
       !signedState ||
       signedState.purpose !== 'supabase-oauth' ||
-      signedState.state !== state
+      typeof signedState.state !== 'string' ||
+      (state !== undefined && signedState.state !== state)
     ) {
       c.header('set-cookie', clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'));
       return c.redirect(appUrl('/login?error=supabase'), 302);
     }
+    c.header('set-cookie', clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'));
     if (c.req.query('error')) return c.redirect(appUrl('/login?error=supabase'), 302);
     const code = c.req.query('code');
     if (!code || typeof signedState.verifier !== 'string') return c.redirect(appUrl('/login?error=supabase'), 302);
@@ -421,17 +335,17 @@ function registerAuthRoutes(app: Hono<AppContext>): void {
     try {
       const tokens = await supabaseAuthRequest<{
         access_token?: unknown;
-        user?: { email?: unknown };
+        user?: { id?: unknown; email?: unknown; email_confirmed_at?: unknown; app_metadata?: { provider?: unknown }; identities?: Array<{ provider?: unknown }> };
       }>('token?grant_type=pkce', {
         auth_code: code,
         code_verifier: signedState.verifier,
       });
-      if (typeof tokens.access_token !== 'string' || typeof tokens.user?.email !== 'string') {
+      if (typeof tokens.access_token !== 'string' || typeof tokens.user?.id !== 'string' || typeof tokens.user.email !== 'string' || !tokens.user.email_confirmed_at || !(tokens.user.app_metadata?.provider === 'google' || tokens.user.identities?.some(identity => identity.provider === 'google'))) {
         throw new Error('Supabase did not return a verified user session.');
       }
       c.header(
         'set-cookie',
-        sessionCookie(createIdentitySessionToken(tokens.user.email.toLowerCase(), sessionSecret), getConfig().nodeEnv === 'production'),
+        sessionCookie(await issueGoogleSession(tokens.user.id, tokens.user.email.toLowerCase(), sessionSecret), getConfig().nodeEnv === 'production'),
       );
       c.header(
         'set-cookie',
@@ -439,122 +353,36 @@ function registerAuthRoutes(app: Hono<AppContext>): void {
         { append: true },
       );
       const destination = safeReturnPath(typeof signedState.returnTo === 'string' ? signedState.returnTo : null);
-      return c.redirect(appUrl(`/login?entry=1&from=${encodeURIComponent(destination)}`), 302);
+      return c.redirect(appUrl(destination), 302);
     } catch (error) {
       log.warn('auth.supabase_oauth_callback_failed', { message: error instanceof Error ? error.message : String(error) });
       return c.redirect(appUrl('/login?error=supabase'), 302);
     }
   });
 
-  app.post('/api/auth/magic-link', async (c) => {
+  const retired = (c: Context<AppContext>) => c.json({ error: { code: 'GOOGLE_SIGN_IN_REQUIRED', message: 'Continue with Google. Password and email-link sign-in are disabled.' } }, 410);
+  app.post('/api/auth/magic-link', retired);
+  app.get('/api/auth/magic/verify', retired);
+  app.post('/api/auth/entry', retired);
+  app.post('/api/auth/login', retired);
+
+  app.post('/api/auth/logout', async (c) => {
     if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
       return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
     }
-    if (!authIsConfigured()) {
-      return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured.' } }, 503);
-    }
-    const address = requestAddress(c);
-    if (loginRateLimited(address)) {
-      return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many attempts. Try again later.' } }, 429);
-    }
-    const body = (await c.req.json().catch(() => null)) as { email?: unknown; from?: unknown } | null;
-    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return c.json({ error: { code: 'INVALID_EMAIL', message: 'Enter a valid email address.' } }, 400);
-    }
-    if (!process.env.RESEND_API_KEY) {
-      return c.json({ error: { code: 'MAGIC_LINK_NOT_CONFIGURED', message: 'Set RESEND_API_KEY on the API service to send sign-in links.' } }, 503);
-    }
-    const returnTo = safeReturnPath(typeof body?.from === 'string' ? body.from : null);
-    try {
-      const tokenHash = await generateSupabaseMagicLink(email);
-      const link = new URL('/api/auth/magic/verify', getConfig().appUrl);
-      link.searchParams.set('token_hash', tokenHash);
-      link.searchParams.set('from', returnTo);
-      await sendMagicLink(email, link.toString());
-    } catch (error) {
-      log.warn('auth.magic_link_request_failed', { message: error instanceof Error ? error.message : String(error) });
-      if (error instanceof AppError) throw error;
-      throw new AppError('MAGIC_LINK_REQUEST_FAILED', 'Could not prepare a sign-in link. Please try again.', 502);
-    }
-    noteLoginAttempt(address);
-    return c.json({ sent: true });
-  });
-
-  app.get('/api/auth/magic/verify', async (c) => {
-    const sessionSecret = process.env.SESSION_SECRET;
-    const tokenHash = c.req.query('token_hash');
-    if (!sessionSecret || !tokenHash) return c.redirect(appUrl('/login?error=magic-link'), 302);
-    try {
-      const verified = await supabaseAuthRequest<{
-        user?: { email?: unknown };
-      }>('verify', { token_hash: tokenHash, type: 'magiclink' });
-      if (typeof verified.user?.email !== 'string') {
-        return c.redirect(appUrl('/login?error=magic-link'), 302);
-      }
-      c.header(
-        'set-cookie',
-        sessionCookie(createIdentitySessionToken(verified.user.email.toLowerCase(), sessionSecret), getConfig().nodeEnv === 'production'),
-      );
-      const destination = safeReturnPath(c.req.query('from'));
-      return c.redirect(appUrl(`/login?entry=1&from=${encodeURIComponent(destination)}`), 302);
-    } catch (error) {
-      log.warn('auth.magic_link_verify_failed', { message: error instanceof Error ? error.message : String(error) });
-      return c.redirect(appUrl('/login?error=magic-link'), 302);
-    }
-  });
-
-  const enterWorkspace = async (c: Context<AppContext>) => {
-    if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
-      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
-    }
-    const sessionSecret = process.env.SESSION_SECRET;
-    if (!authIsConfigured() || !sessionSecret) {
-      return c.json({ error: { code: 'AUTH_NOT_CONFIGURED', message: 'Admin authentication is not configured.' } }, 503);
-    }
-    const claims = verifySessionClaims(sessionTokenFromCookie(c.req.header('cookie')), sessionSecret);
-    if (!claims?.email) {
-      return c.json({ error: { code: 'IDENTITY_REQUIRED', message: 'Sign in with Google or a magic link first.' } }, 401);
-    }
-    const address = requestAddress(c);
-    if (loginRateLimited(address)) {
-      return c.json({ error: { code: 'LOGIN_RATE_LIMITED', message: 'Too many attempts. Try again later.' } }, 429);
-    }
-    const body = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
-    const password = typeof body?.password === 'string' ? body.password : '';
-    if (!(await verifyConfiguredPassword(password))) {
-      noteLoginAttempt(address);
-      return c.json({ error: { code: 'INVALID_ENTRY_PASSWORD', message: 'The entry password is incorrect.' } }, 401);
-    }
-    loginAttempts.delete(address);
-    c.header(
-      'set-cookie',
-      sessionCookie(
-        createSessionToken(process.env.ADMIN_USERNAME || 'Admin', sessionSecret, Date.now(), {
-          email: claims.email,
-          entryVerified: true,
-        }),
-        getConfig().nodeEnv === 'production',
-      ),
-    );
-    return c.json({ authenticated: true, username: process.env.ADMIN_USERNAME || 'Admin' });
-  };
-
-  app.post('/api/auth/entry', enterWorkspace);
-  app.post('/api/auth/login', enterWorkspace);
-
-  app.post('/api/auth/logout', (c) => {
-    if (!isAllowedBrowserOrigin(c.req.header('origin') ?? '')) {
-      return c.json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } }, 403);
-    }
+    const secret = process.env.SESSION_SECRET;
+    const session = secret ? await authenticatedSession(sessionTokenFromCookie(c.req.header('cookie')), secret) : null;
+    if (session) await revokeSession(session);
     c.header('set-cookie', clearSessionCookie(getConfig().nodeEnv === 'production'));
     c.header('set-cookie', clearCookie(SUPABASE_STATE_COOKIE, getConfig().nodeEnv === 'production'), { append: true });
     return c.json({ authenticated: false });
   });
 }
 
-function orgIdOf(c: { req: { header: (k: string) => string | undefined } }): string {
-  return c.req.header('x-organization-id') ?? 'local-org';
+function orgIdOf(c: Context<AppContext>): string {
+  const organizationId = c.get('organizationId');
+  if (!organizationId) throw new AppError('AUTH_REQUIRED', 'Sign in with Google to continue.', 401);
+  return organizationId;
 }
 
 /**
@@ -601,6 +429,9 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       autoIndex?: boolean;
     };
 
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw Errors.badRequest('Invalid repository input.');
+    for (const value of [body.owner,body.name,body.branch,body.defaultBranch,body.repoUrl]) if (value !== undefined && (typeof value !== 'string' || value.length > 2048)) throw Errors.badRequest('Invalid repository input.');
+    if (body.checkoutPath) throw Errors.badRequest('Local checkout paths are not accepted by the web API.');
     // Accept either explicit owner/name or a pasted URL / owner#name reference.
     let owner = body.owner?.trim() ?? '';
     let name = body.name?.trim() ?? '';
@@ -625,6 +456,8 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       branch = branch ?? parsed.branch ?? undefined;
     }
 
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/.test(owner) || !/^[a-zA-Z0-9_.-]{1,100}$/.test(name) || name === '.' || name === '..') throw Errors.badRequest('Invalid GitHub repository name.');
+    if (branch && (branch.startsWith('-') || branch.length > 255 || /[\u0000-\u0020\u007f]/.test(branch))) throw Errors.badRequest('Invalid branch.');
     const wantsClone = !checkoutPathInput || Boolean(repoUrl) || Boolean(branch);
     let checkoutPath = checkoutPathInput;
     let cloned = null;
@@ -632,9 +465,9 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     if (wantsClone) {
       // App installation when it covers the repo, otherwise the saved token —
       // that is what makes private repositories cloneable without an App.
-      const cred = await resolveCloneCredential({ owner, name });
+      const cred = await resolveCloneCredential({ owner, name, organizationId: orgIdOf(c) });
       if (!cred.token) log.warn('clone.no_credential', { owner, name, note: 'public repos clone anonymously; private ones need an App installation or a token' });
-      cloned = await cloneOrPull({ owner, name, branch, token: cred.token, existingPath: checkoutPathInput ?? null });
+      cloned = await cloneOrPull({ owner, name, branch, token: cred.token, existingPath: null, baseDir: resolve(process.env.CBI_CHECKOUT_DIR ?? '.cbi/checkouts', orgIdOf(c), uuid()) });
       checkoutPath = cloned.checkoutPath;
       branch = branch ?? cloned.branch;
     }
@@ -688,26 +521,14 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     const body = (await c.req.json().catch(() => ({}))) as { repoUrl?: string; owner?: string; name?: string };
     const parsed = parseRepoReference(body.repoUrl ?? '') ??
       (body.owner && body.name ? { owner: body.owner, name: body.name, branch: null } : null);
-    if (!parsed) throw Errors.badRequest('Provide a repository URL or `owner` and `name`.');
+    if (!parsed || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/.test(parsed.owner) || !/^[a-zA-Z0-9_.-]{1,100}$/.test(parsed.name) || ['.','..'].includes(parsed.name)) throw Errors.badRequest('Provide a valid GitHub repository.');
 
     const config = getConfig();
     const appConfigured = Boolean(config.github.appId && config.github.privateKey);
 
-    if (!appConfigured) {
-      return c.json({
-        owner: parsed.owner,
-        name: parsed.name,
-        appConfigured: false,
-        accessible: null,
-        requiresInstall: false,
-        message:
-          'No GitHub App credentials are configured. Public repositories can still be cloned anonymously; set GITHUB_APP_ID and GITHUB_PRIVATE_KEY to read private ones.',
-      });
-    }
-
     // Always 200: resolution never throws — it reports the best credential it
     // could find plus exactly what is blocking comments.
-    const access = await resolveGitHubAccess(parsed.owner, parsed.name);
+    const access = await resolveGitHubAccess(parsed.owner, parsed.name, orgIdOf(c));
     const cap = access.capability;
     return c.json({
       owner: parsed.owner,
@@ -734,7 +555,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
   });
 
   /** Which GitHub credential the server is using (never returns the secret). */
-  app.get('/api/github/credentials', (c) => c.json(tokenStatus()));
+  app.get('/api/github/credentials', async (c) => c.json(await tokenStatus(orgIdOf(c))));
 
   /**
    * Save a personal access token so reviews can be posted immediately, for
@@ -744,12 +565,12 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     const body = (await c.req.json().catch(() => ({}))) as { token?: string };
     const token = typeof body.token === 'string' ? body.token.trim() : '';
     if (!token) {
-      clearToken();
-      return c.json({ ok: true, ...tokenStatus() });
+      await clearToken(orgIdOf(c));
+      return c.json({ ok: true, ...await tokenStatus(orgIdOf(c)) });
     }
     try {
-      const { login, scopes } = await saveToken(token);
-      return c.json({ ...tokenStatus(), ok: true, login, scopes });
+      const { login, scopes } = await saveToken(token, orgIdOf(c));
+      return c.json({ ...await tokenStatus(orgIdOf(c)), ok: true, login, scopes });
     } catch (e) {
       throw Errors.badRequest(e instanceof Error ? e.message : 'Could not validate that token.');
     }
@@ -780,7 +601,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     const repo = await requireRepo(repositoryId, organizationId);
     const body = (await c.req.json().catch(() => null)) as { branch?: unknown } | null;
     const branch = typeof body?.branch === 'string' ? body.branch.trim() : '';
-    if (!branch || branch.length > 255 || /[\u0000-\u001f\u007f]/.test(branch)) {
+    if (!branch || branch.startsWith('-') || branch.length > 255 || /[\u0000-\u001f\u007f]/.test(branch)) {
       throw Errors.badRequest('Enter a valid branch name (1–255 characters).');
     }
     const duplicate = (await listRepos(organizationId)).find(
@@ -801,13 +622,14 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       throw new AppError('REPOSITORY_BUSY', 'Wait for the current repository job to finish before switching branches.', 409);
     }
 
-    const credential = await resolveCloneCredential({ owner: repo.owner, name: repo.name });
+    const credential = await resolveCloneCredential({ owner: repo.owner, name: repo.name, organizationId: repo.organizationId });
     const cloned = await cloneOrPull({
       owner: repo.owner,
       name: repo.name,
       branch,
       token: credential.token,
       existingPath: repo.checkoutPath,
+      baseDir: dirname(repo.checkoutPath),
     });
     await updateRepoBranch(repo.id, organizationId, cloned.branch);
     await graphStore().clearRepository(repo.id);
@@ -868,11 +690,13 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
       incremental?: boolean;
       changedFiles?: string[];
     };
+    if (body.changedFiles !== undefined && (!Array.isArray(body.changedFiles) || body.changedFiles.length > 2000 || body.changedFiles.some(file => typeof file !== 'string'))) throw Errors.badRequest('Invalid changed files.');
+    if (body.checkoutPath || body.changedFiles?.some(file => /(^|[\\/])\.\.([\\/]|$)/.test(file) || /^(?:[\\/]|[a-z]:)/i.test(file))) throw Errors.badRequest('Invalid indexing path.');
     const job = jobQueue.enqueue(
       'index',
       repo.id,
       {
-        checkoutPath: body.checkoutPath ?? repo.checkoutPath,
+        checkoutPath: repo.checkoutPath,
         commitSha: body.commitSha ?? null,
         incremental: body.incremental ?? false,
         changedFiles: body.changedFiles ?? [],
@@ -896,6 +720,7 @@ function registerRepositoryRoutes(app: Hono<AppContext>): void {
     const repo = await requireRepo(c.req.param('id'), orgIdOf(c));
     const jobId = c.req.query('jobId');
     const job = jobId ? jobQueue.get(jobId) : jobQueue.latest(repo.id, 'index');
+    if (job && job.repositoryId !== repo.id) throw new AppError('JOB_NOT_FOUND', 'Job not found.', 404);
     return c.json({ repository: serializeRepo(repo), job: job ? serializeJob(job) : null });
   });
 }
@@ -1032,7 +857,7 @@ function registerGraphRoutes(app: Hono<AppContext>): void {
       node: toClientNode(node),
       outgoing: out.map(toClientEdge),
       incoming: incoming.map(toClientEdge),
-      neighbors: neighbors.map(toClientNode),
+      neighbors: neighbors.filter(node => node.repositoryId === repo.id).map(toClientNode),
       evidence,
     });
   });
@@ -1054,7 +879,9 @@ function registerGraphRoutes(app: Hono<AppContext>): void {
       direction,
       ...(edgeTypes ? { edgeTypes } : {}),
     });
-    return c.json({ nodes: sub.nodes.map(toClientNode), edges: sub.edges.map(toClientEdge), truncated: sub.truncated });
+    const ownedNodes = sub.nodes.filter(node => node.repositoryId === repo.id);
+    const ownedIds = new Set(ownedNodes.map(node => node.id));
+    return c.json({ nodes: ownedNodes.map(toClientNode), edges: sub.edges.filter(edge => ownedIds.has(edge.sourceNodeId) && ownedIds.has(edge.targetNodeId)).map(toClientEdge), truncated: sub.truncated });
   });
 
   app.get('/api/repositories/:id/paths', async (c) => {
@@ -1063,7 +890,10 @@ function registerGraphRoutes(app: Hono<AppContext>): void {
     const to = c.req.query('to');
     if (!from || !to) throw Errors.badRequest('`from` and `to` query parameters are required.');
     const store = graphStore();
+    const endpoints = await store.getNodes([from, to]);
+    if (endpoints.length !== new Set([from, to]).size || endpoints.some(node => node.repositoryId !== repo.id)) throw new AppError('NODE_NOT_FOUND', 'Node not found.', 404);
     const path = await store.findPath(from, to, Math.min(Number(c.req.query('maxDepth') ?? 8), 12));
+    if (path.nodes.some(node => node.repositoryId !== repo.id)) throw new AppError('NODE_NOT_FOUND', 'Node not found.', 404);
     if (!path.found) return c.json({ found: false, nodes: [], edges: [], length: 0 });
     return c.json({
       found: true,
@@ -1301,7 +1131,7 @@ function registerPrRoutes(app: Hono<AppContext>): void {
    * and merge in whatever this service has reviewed locally.
    */
   async function collectPullRequests(repo: RepoRecord) {
-    const access = await resolveGitHubAccess(repo.owner, repo.name);
+    const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
 
     const [dbRows, dbReviews, ghPrs] = await Promise.all([
       usingDatabase()
@@ -1515,7 +1345,7 @@ function registerPrRoutes(app: Hono<AppContext>): void {
   /** Whether this server can post comments right now, and how to enable it. */
   app.get('/api/repositories/:id/github-capability', async (c) => {
     const repo = await requireRepo(c.req.param('id'), orgIdOf(c));
-    const access = await resolveGitHubAccess(repo.owner, repo.name);
+    const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
     return c.json({ owner: repo.owner, repository: repo.name, ...access.capability });
   });
 
@@ -1554,7 +1384,9 @@ function registerPrRoutes(app: Hono<AppContext>): void {
       checkoutPath?: string;
       postNewComment?: boolean;
     };
-    const access = await resolveGitHubAccess(repo.owner, repo.name);
+    if (body.checkoutPath) throw Errors.badRequest('Local checkout paths are not accepted by the web API.');
+    if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw Errors.badRequest('Invalid pull request number.');
+    const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
 
     let title = `PR #${prNumber}`;
     let baseSha = body.baseSha ?? null;
@@ -1623,7 +1455,7 @@ function registerPrRoutes(app: Hono<AppContext>): void {
         title,
         baseSha,
         headSha: headSha!,
-        checkoutPath: body.checkoutPath ?? repo.checkoutPath,
+        checkoutPath: repo.checkoutPath,
         reviewVersion: REVIEW_VERSION,
         reviewId,
         postNewComment: body.postNewComment === true,
@@ -1674,8 +1506,9 @@ function registerWebhookRoutes(app: Hono<AppContext>): void {
 
     try {
       if (event.owner && event.repo) {
-        const repos = await listRepos();
-        const match = repos.find((r) => r.owner === event.owner && r.name === event.repo);
+        const repos = await listAllRepos();
+        const matches = repos.filter((r) => r.owner.toLowerCase() === event.owner!.toLowerCase() && r.name.toLowerCase() === event.repo!.toLowerCase());
+        for (const match of matches) {
 
         // Gate on the branch this repository tracks, so only PRs aimed at it
         // are reviewed and commented on.
@@ -1713,13 +1546,10 @@ function registerWebhookRoutes(app: Hono<AppContext>): void {
               requestId: c.get('requestId'),
             });
           }
-          try {
-            supabaseConfig();
-          } catch {
-            return c.redirect(appUrl('/login?error=supabase'), 302);
-          }
+
         } else {
-          log.warn('webhook.repository_not_connected', { owner: event.owner, repo: event.repo });
+          log.warn('webhook.review_not_scheduled', { repositoryId: match.id });
+        }
         }
       }
       if (usingDatabase()) await db.markWebhookProcessed(deliveryId);
@@ -1742,7 +1572,7 @@ function registerWebhookRoutes(app: Hono<AppContext>): void {
 function registerJobHandlers(): void {
   jobQueue.register('index', async (job, update) => {
     const repositoryId = job.repositoryId;
-    const repo = await getRepo(repositoryId);
+    const repo = await getRepoInternal(repositoryId);
     if (!repo) throw new Error(`Repository ${repositoryId} not found for indexing.`);
 
     await updateRepo(repositoryId, { indexStatus: 'INDEXING', error: null });
@@ -1756,13 +1586,14 @@ function registerJobHandlers(): void {
     if (!incremental) {
       update({ stage: 'CLONING', progress: 2 });
       try {
-        const cred = await resolveCloneCredential({ owner: repo.owner, name: repo.name });
+        const cred = await resolveCloneCredential({ owner: repo.owner, name: repo.name, organizationId: repo.organizationId });
         const synced = await cloneOrPull({
           owner: repo.owner,
           name: repo.name,
           branch: repo.branch,
           token: cred.token,
           existingPath: checkoutPath,
+          baseDir: dirname(repo.checkoutPath),
         });
         checkoutPath = synced.checkoutPath;
         if (!job.payload['commitSha'] && synced.commitSha) commitSha = synced.commitSha;
@@ -1905,7 +1736,7 @@ function registerJobHandlers(): void {
 
   jobQueue.register('review', async (job, update) => {
     const repositoryId = job.repositoryId;
-    const repo = await getRepo(repositoryId);
+    const repo = await getRepoInternal(repositoryId);
     if (!repo) throw new Error(`Repository ${repositoryId} not found for review.`);
     const ai = aiProvider();
     update({ stage: 'FRAMEWORK_ANALYSIS', progress: 20 });
@@ -1974,7 +1805,7 @@ function registerJobHandlers(): void {
     });
 
     try {
-      const access = await resolveGitHubAccess(job.payload['owner'] as string, job.payload['repo'] as string);
+      const access = await resolveGitHubAccess(job.payload['owner'] as string, job.payload['repo'] as string, repo.organizationId);
       const result = await runReviewJob({
         repositoryId,
         owner: job.payload['owner'] as string,

@@ -8,7 +8,8 @@ let envLoaded = false;
 export function loadEnv(cwd = process.cwd()): void {
   if (envLoaded) return;
   envLoaded = true;
-  const paths = [resolve(cwd, '.env'), resolve(cwd, '.env.local')];
+  // Node preserves existing environment variables, so load the local overrides first.
+  const paths = [resolve(cwd, '.env.local'), resolve(cwd, '.env')];
   for (const p of paths) {
     if (!existsSync(p)) continue;
     try {

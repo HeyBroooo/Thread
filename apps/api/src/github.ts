@@ -250,14 +250,16 @@ function tokenAccess(token: string, ctx: AccessContext): GitHubAccess {
  * throwing, so reads keep working when the GitHub App is not installed on the
  * repository.
  */
-export async function resolveGitHubAccess(owner: string, name: string): Promise<GitHubAccess> {
+export async function resolveGitHubAccess(owner: string, name: string, organizationId?: string): Promise<GitHubAccess> {
   const config = getConfig();
-  const appId = config.github.appId;
-  const privateKey = config.github.privateKey;
+  // A Google identity is not proof of ownership of a shared GitHub App installation.
+  // Until installation-to-user linking exists, tenant requests use only their own PAT.
+  const appId = organizationId ? null : config.github.appId;
+  const privateKey = organizationId ? null : config.github.privateKey;
   const appConfigured = Boolean(appId && privateKey);
   const { resolveToken, tokenStatus } = await import('./credentials.js');
-  const pat = resolveToken();
-  const status = tokenStatus();
+  const pat = await resolveToken(organizationId);
+  const status = organizationId ? await tokenStatus(organizationId) : { source: 'none' as const };
   const slug = appConfigured ? await appSlug(appId!, privateKey!) : null;
 
   const ctx: AccessContext = {
@@ -467,9 +469,10 @@ export async function githubClientFor(owner: string, name: string): Promise<GitH
 export async function resolveCloneCredential(options: {
   owner: string;
   name: string;
+  organizationId?: string;
 }): Promise<{ token: string | null; installationId: number | null; source: 'app' | 'token' | 'none' }> {
   const config = getConfig();
-  if (config.github.appId && config.github.privateKey) {
+  if (!options.organizationId && config.github.appId && config.github.privateKey) {
     try {
       const jwt = createAppJwt(config.github.appId, config.github.privateKey.replace(/\\n/g, '\n'));
       const res = await fetch(
@@ -490,7 +493,7 @@ export async function resolveCloneCredential(options: {
     }
   }
   const { resolveToken } = await import('./credentials.js');
-  const pat = resolveToken();
+  const pat = await resolveToken(options.organizationId);
   if (pat) return { token: pat, installationId: null, source: 'token' };
   return { token: null, installationId: null, source: 'none' };
 }

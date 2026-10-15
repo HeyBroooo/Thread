@@ -1,7 +1,7 @@
 import { createLogger, isAppError } from '@cbi/shared';
 import { REVIEW_VERSION } from '@cbi/pr-reviewer';
 import { jobQueue } from './queue.js';
-import { listRepos, type RepoRecord } from './services.js';
+import { listAllRepos, type RepoRecord } from './services.js';
 import { resolveGitHubAccess } from './github.js';
 import { claimScheduled, hasBlockedComments, hasReviewForHead, recordPullRequest } from './prStore.js';
 
@@ -46,7 +46,7 @@ export async function runOnce(): Promise<{ checked: number; enqueued: number }> 
   let checked = 0;
   let enqueued = 0;
   try {
-    const repos = await listRepos();
+    const repos = await listAllRepos();
     for (const repo of repos) {
       try {
         const result = await syncRepository(repo);
@@ -74,7 +74,7 @@ export async function runOnce(): Promise<{ checked: number; enqueued: number }> 
 async function syncRepository(repo: RepoRecord): Promise<{ checked: number; enqueued: number }> {
   // The base branch is whatever this repository tracks in the site config.
   const target = repo.branch || repo.defaultBranch;
-  const access = await resolveGitHubAccess(repo.owner, repo.name);
+  const access = await resolveGitHubAccess(repo.owner, repo.name, repo.organizationId);
   const prs = await access.client.listPullRequests(repo.owner, repo.name, 'open');
 
   let enqueued = 0;

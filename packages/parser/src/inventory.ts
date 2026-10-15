@@ -141,6 +141,7 @@ export function buildInventory(root: string, options: InventoryOptions = {}): In
       return;
     }
     for (const entry of entries) {
+      if (entry.isSymbolicLink() && options.followSymlinks !== true) { skipped++; continue; }
       const abs = join(dir, entry.name);
       const rel = normalizePath(relative(root, abs));
       const isDir = entry.isDirectory() || (entry.isSymbolicLink() && options.followSymlinks === true && isDirSafe(abs));

@@ -280,6 +280,24 @@ CREATE TABLE IF NOT EXISTS project_conventions (
 );
 `;
 
-export const MIGRATIONS: Migration[] = [{ version: 1, name: 'initial_schema', sql: M1 }];
+const M2 = `
+CREATE TABLE IF NOT EXISTS auth_sessions (
+ session_id TEXT PRIMARY KEY,
+ organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL,
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS user_github_credentials (
+ organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+ encrypted_token TEXT NOT NULL,
+ github_login TEXT NOT NULL,
+ saved_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+`;
+export const MIGRATIONS: Migration[] = [
+ { version: 1, name: 'initial_schema', sql: M1 },
+ { version: 2, name: 'user_workspaces_and_sessions', sql: M2 },
+];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

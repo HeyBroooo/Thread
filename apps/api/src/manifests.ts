@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { createLogger } from '@cbi/shared';
+import { resolve, relative, isAbsolute } from 'node:path';
+import { createLogger, DiskSourceRegistry } from '@cbi/shared';
 
 const log = createLogger({ component: 'manifests' });
 
@@ -60,9 +60,10 @@ interface RawManifest {
   workspaces?: string[] | { packages?: string[] };
 }
 
-function readJson<T>(file: string): T | null {
+function readJson<T>(file: string, root: string): T | null {
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as T;
+    const content = new DiskSourceRegistry(root).getFileContent(relative(root, file));
+    return content ? JSON.parse(content) as T : null;
   } catch {
     return null;
   }
@@ -72,6 +73,7 @@ function readJson<T>(file: string): T | null {
 function expandWorkspaceGlobs(root: string, patterns: string[]): string[] {
   const dirs: string[] = [];
   for (const pattern of patterns) {
+    if (typeof pattern !== 'string' || pattern.includes('..') || isAbsolute(pattern) || pattern.includes('\\')) continue;
     const clean = pattern.replace(/\/+$/, '');
     if (!clean.includes('*')) {
       if (existsSync(resolve(root, clean, 'package.json'))) dirs.push(resolve(root, clean));
@@ -105,7 +107,7 @@ function workspacePatterns(root: RawManifest | null, checkout: string): string[]
   const pnpm = resolve(checkout, 'pnpm-workspace.yaml');
   if (existsSync(pnpm)) {
     try {
-      const lines = readFileSync(pnpm, 'utf8').split('\n');
+      const lines = (new DiskSourceRegistry(checkout).getFileContent('pnpm-workspace.yaml') ?? '').split('\n');
       const globs: string[] = [];
       for (const line of lines) {
         const m = line.match(/^\s*-\s*['"]?([^'"#]+?)['"]?\s*$/);
@@ -201,7 +203,7 @@ export function readProjectManifest(checkoutPath: string | null | undefined): Pr
   const rootFile = resolve(checkoutPath, 'package.json');
   if (!existsSync(rootFile)) return empty;
 
-  const root = readJson<RawManifest>(rootFile);
+  const root = readJson<RawManifest>(rootFile, checkoutPath);
   if (!root) {
     log.warn('manifests.root_unreadable', { checkoutPath });
     return empty;
@@ -220,7 +222,7 @@ export function readProjectManifest(checkoutPath: string | null | undefined): Pr
   const workspaces: WorkspacePackage[] = [];
   const dirs = expandWorkspaceGlobs(checkoutPath, workspacePatterns(root, checkoutPath));
   for (const dir of dirs.slice(0, 60)) {
-    const manifest = readJson<RawManifest>(resolve(dir, 'package.json'));
+    const manifest = readJson<RawManifest>(resolve(dir, 'package.json'), checkoutPath);
     if (!manifest) continue;
     const rel = dir.replace(checkoutPath, '').replace(/^[\\/]+/, '').replace(/\\/g, '/');
     workspaces.push({

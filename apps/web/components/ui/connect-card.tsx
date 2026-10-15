@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { GitHubConnection } from '@/components/GitHubConnection';
 import { api } from '@/lib/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Alert, AlertDescription } from './alert';
@@ -15,7 +16,6 @@ export function ConnectCard() {
   const [owner, setOwner] = useState('');
   const [name, setName] = useState('');
   const [branch, setBranch] = useState('');
-  const [checkoutPath, setCheckoutPath] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [connectStage, setConnectStage] = useState<'checking' | 'cloning' | 'done' | null>(null);
   const [access, setAccess] = useState<{
@@ -53,14 +53,13 @@ export function ConnectCard() {
           ? { owner: owner.trim(), name: name.trim(), ...(branch.trim() ? { branch: branch.trim() } : {}) }
           : { repoUrl: url }),
         ...(branch.trim() && url ? { branch: branch.trim() } : {}),
-        ...(checkoutPath.trim() ? { checkoutPath: checkoutPath.trim() } : {}),
       });
       setRepoUrl('');
       setOwner('');
       setName('');
       setBranch('');
-      setCheckoutPath('');
       setConnectStage('done');
+      window.dispatchEvent(new Event('repository-created'));
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : String(e2));
     } finally {
@@ -87,6 +86,7 @@ export function ConnectCard() {
         </CardHeader>
 
         <CardContent className="pt-0">
+          <GitHubConnection/>
           <form onSubmit={connect} className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex min-w-0 flex-[2_1_240px] flex-col gap-2">
@@ -144,7 +144,7 @@ export function ConnectCard() {
                 />
                 <span>Advanced</span>
                 <span className="font-normal text-muted-foreground/70">
-                  — existing checkout or manual owner/name
+                  — enter owner and repository name
                 </span>
               </button>
 
@@ -178,20 +178,10 @@ export function ConnectCard() {
                           autoComplete="off"
                         />
                       </div>
-                      <div className="flex min-w-0 flex-[1_1_160px] flex-col gap-1.5">
-                        <Label htmlFor="connect-checkout">Local checkout path (optional)</Label>
-                        <Input
-                          id="connect-checkout"
-                          value={checkoutPath}
-                          onChange={(e) => setCheckoutPath(e.target.value)}
-                          placeholder="C:\code\patient-portal"
-                          autoComplete="off"
-                        />
-                      </div>
                     </div>
                     <p className="m-0 px-3.5 pb-3.5 text-xs leading-relaxed text-muted-foreground">
-                      Without a checkout path the API clones into <code>.cbi/checkouts</code>. If the
-                      repository is private, install the GitHub App on it first.
+                      Repositories are cloned into a directory isolated to your workspace. For private
+                      repositories, connect your own GitHub token from the pull requests page.
                     </p>
                   </motion.div>
                 )}
@@ -214,7 +204,7 @@ export function ConnectCard() {
                 className="mt-3.5 text-xs text-muted-foreground"
               >
                 {connectStage === 'checking'
-                  ? 'Checking whether the GitHub App can access this repository…'
+                  ? 'Checking access to this repository…'
                   : connectStage === 'cloning'
                     ? 'Cloning the repository and building the graph — this runs in the background.'
                     : 'Connected. The graph is building — the repository updates as indexing progresses.'}

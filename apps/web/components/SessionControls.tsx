@@ -25,10 +25,12 @@ export function SessionControls({ variant = 'floating' }: { variant?: 'floating'
   const isRepoPage = pathname.startsWith('/repositories/');
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     void api.authSession()
-      .then((session) => setAuthenticated(session.authenticated))
+      .then((session) => {setAuthenticated(session.authenticated);setEmail(session.email ?? '');})
       .catch(() => setAuthenticated(false));
   }, [isLoginPage]);
 
@@ -43,12 +45,13 @@ export function SessionControls({ variant = 'floating' }: { variant?: 'floating'
       router.replace('/login');
       router.refresh();
     } catch {
-      window.location.assign('/login');
+      setError('Could not sign out. Please try again.');
     }
   }
 
   return (
     <div className={`session-controls ${variant}`}>
+      {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="session-controls-trigger">
@@ -57,7 +60,7 @@ export function SessionControls({ variant = 'floating' }: { variant?: 'floating'
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
+          <DropdownMenuLabel>{email || 'Your account'}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => void signOut()}>
             <LogOut aria-hidden="true" />

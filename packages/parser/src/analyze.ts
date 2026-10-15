@@ -1,3 +1,4 @@
+import { DiskSourceRegistry } from '@cbi/shared';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizePath, uniqueBy } from '@cbi/shared';
@@ -74,7 +75,9 @@ export function analyzeRepository(root: string, options: AnalyzeOptions = {}): A
     options.onProgress?.({ processed, total: limited.length, filePath: file.filePath });
     let content: string;
     try {
-      content = readFileSync(join(root, file.filePath), 'utf8');
+      const safeContent = new DiskSourceRegistry(root).getFileContent(file.filePath);
+      if (safeContent === null) continue;
+      content = safeContent;
     } catch {
       continue;
     }
@@ -126,7 +129,8 @@ export function reanalyzeFiles(root: string, analyzed: AnalyzedRepository, paths
   const out: ParsedFile[] = [];
   for (const rel of uniqueBy(paths.map(normalizePath), (p) => p)) {
     try {
-      const content = readFileSync(join(root, rel), 'utf8');
+      const content = new DiskSourceRegistry(root).getFileContent(rel);
+      if (content === null) continue;
       const parsed = parseFileContent(rel, content);
       for (const imp of parsed.imports) {
         const r = resolveSpecifier(imp.moduleSpecifier, parsed.filePath, fileSet, analyzed.aliases);

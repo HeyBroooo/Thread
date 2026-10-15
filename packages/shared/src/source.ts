@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 /**
@@ -34,7 +34,11 @@ export class DiskSourceRegistry implements SourceRegistry {
       return null;
     }
     try {
-      const content = readFileSync(abs, 'utf8').slice(0, this.maxBytes);
+      const realRoot = realpathSync(this.rootAbs);
+      const realFile = realpathSync(abs);
+      const realRelative = relative(realRoot, realFile);
+      if (realRelative.startsWith('..') || isAbsolute(realRelative) || !statSync(realFile).isFile() || statSync(realFile).size > this.maxBytes) return null;
+      const content = readFileSync(realFile, 'utf8');
       this.cache.set(clean, content);
       return content;
     } catch {

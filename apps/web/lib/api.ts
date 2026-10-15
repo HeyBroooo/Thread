@@ -1,3 +1,4 @@
+import { demoResponse } from './demo';
 export const API_URL = '';
 
 export interface ApiNode {
@@ -118,6 +119,7 @@ export interface SearchPayload {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (path === '/api/repositories/demo' || path.startsWith('/api/repositories/demo/')) return demoResponse(path, init) as T;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
@@ -143,17 +145,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   authSession: () =>
-    request<{ authenticated: boolean; identityAuthenticated: boolean; email?: string }>('/api/auth/session'),
-  login: (password: string) =>
-    request<{ authenticated: boolean; username: string }>('/api/auth/entry', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    }),
-  requestMagicLink: (email: string, from: string) =>
-    request<{ sent: boolean }>('/api/auth/magic-link', {
-      method: 'POST',
-      body: JSON.stringify({ email, from }),
-    }),
+    request<{ authenticated: boolean; configured: boolean; email?: string }>('/api/auth/session'),
   logout: () => request<{ authenticated: false }>('/api/auth/logout', { method: 'POST' }),
   listRepositories: () => request<{ repositories: RepositoryPayload[] }>('/api/repositories'),
   getRepository: (id: string) => request<{ repository: RepositoryPayload; latestJob: JobPayload | null }>(`/api/repositories/${id}`),
@@ -161,7 +153,6 @@ export const api = {
     owner?: string;
     name?: string;
     branch?: string;
-    checkoutPath?: string;
     repoUrl?: string;
     autoIndex?: boolean;
   }) =>
@@ -186,7 +177,7 @@ export const api = {
       installationId?: number | null;
       message: string;
     }>('/api/github/access', { method: 'POST', body: JSON.stringify({ repoUrl }) }),
-  startIndex: (id: string, input: { checkoutPath?: string; incremental?: boolean; commitSha?: string } = {}) =>
+  startIndex: (id: string, input: { incremental?: boolean; commitSha?: string } = {}) =>
     request<{ job: JobPayload }>(`/api/repositories/${id}/index`, { method: 'POST', body: JSON.stringify(input) }),
   indexStatus: (id: string, jobId?: string) =>
     request<{ repository: RepositoryPayload; job: JobPayload | null }>(`/api/repositories/${id}/index${jobId ? `?jobId=${jobId}` : ''}`),

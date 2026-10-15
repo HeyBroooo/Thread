@@ -84,7 +84,7 @@ export async function listRepos(organizationId = DEV_ORG_ID): Promise<RepoRecord
         indexStatus: row.index_status,
         parserVersion: row.parser_version,
         graphSchemaVersion: row.graph_schema_version,
-        checkoutPath: defaultCheckoutPath(row.owner, row.name),
+        checkoutPath: ((await db.getRepositoryConfig(row.id))['checkoutPath'] as string) ?? defaultCheckoutPath(row.owner, row.name),
         repositoryConfig: await db.getRepositoryConfig(row.id).catch(() => ({})),
         lastIndexedAt: row.last_indexed_at,
         error: row.error,
@@ -92,7 +92,7 @@ export async function listRepos(organizationId = DEV_ORG_ID): Promise<RepoRecord
     }
     return out;
   }
-  return [...memoryRepos.values()];
+  return [...memoryRepos.values()].filter(repo => repo.organizationId === organizationId);
 }
 
 export async function createRepo(input: {
@@ -134,7 +134,7 @@ export async function createRepo(input: {
   }
 
   const organizationId = requestedOrganizationId;
-  const id = `repo_${uuid().slice(0, 8)}`;
+  const id = `repo_${uuid()}`;
   const record: RepoRecord = {
     id,
     organizationId,
@@ -180,8 +180,21 @@ export async function getRepo(id: string, organizationId = DEV_ORG_ID): Promise<
   }
   const record = memoryRepos.get(id);
   if (!record) return null;
-  if (record.organizationId !== organizationId && organizationId !== DEV_ORG_ID) return null;
+  if (record.organizationId !== organizationId) return null;
   return record;
+}
+
+/** Internal queue/webhook access only. Never use these helpers in request handlers. */
+export async function listAllRepos(): Promise<RepoRecord[]> {
+ if (!usingDatabase()) return [...memoryRepos.values()];
+ const rows = await db.query<{id:string;organization_id:string}>('SELECT id, organization_id FROM repositories');
+ const repos = await Promise.all(rows.map(row => getRepo(row.id,row.organization_id)));
+ return repos.filter((repo): repo is RepoRecord => repo !== null);
+}
+export async function getRepoInternal(id:string): Promise<RepoRecord|null> {
+ if (!usingDatabase()) return memoryRepos.get(id) ?? null;
+ const row = await db.queryOne<{organization_id:string}>('SELECT organization_id FROM repositories WHERE id=$1',[id]);
+ return row ? getRepo(id,row.organization_id) : null;
 }
 
 export async function updateRepo(

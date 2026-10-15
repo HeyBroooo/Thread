@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
-import { normalizePath } from '@cbi/shared';
+import { join, dirname, resolve, relative } from 'node:path';
+import { normalizePath, DiskSourceRegistry } from '@cbi/shared';
 import type { Inventory } from './types.js';
 
 export interface AliasMapping {
@@ -50,9 +50,10 @@ export function parseJsonc<T = unknown>(text: string): T | null {
   }
 }
 
-function readJson<T = unknown>(path: string): T | null {
+function readJson<T = unknown>(path: string, root: string): T | null {
   try {
-    return parseJsonc<T>(readFileSync(path, 'utf8'));
+    const content = new DiskSourceRegistry(root).getFileContent(relative(root, path));
+    return content === null ? null : parseJsonc<T>(content);
   } catch {
     return null;
   }
@@ -82,7 +83,7 @@ export function analyzeProjectConfig(root: string, inventory: Inventory): Projec
       peerDependencies?: Record<string, string>;
       scripts?: Record<string, string>;
       type?: string;
-    }>(abs);
+    }>(abs, root);
     if (!pkg) {
       findings.push(`Could not parse ${rel}`);
       continue;
@@ -126,7 +127,7 @@ export function analyzeProjectConfig(root: string, inventory: Inventory): Projec
       const cfg = readJson<{
         compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
         extends?: string;
-      }>(join(root, rel));
+      }>(join(root, rel), root);
       const baseUrl = cfg?.compilerOptions?.baseUrl ?? '.';
       const baseDir = normalizePath(join(dirname(rel), baseUrl));
       for (const [pattern, targets] of Object.entries(cfg?.compilerOptions?.paths ?? {})) {
@@ -142,7 +143,7 @@ export function analyzeProjectConfig(root: string, inventory: Inventory): Projec
 
   const rootPkg = packages.find((p) => p.path === '') ?? packages[0];
   const moduleType: ProjectConfig['moduleType'] = rootPkg
-    ? readJson<{ type?: string }>(join(root, 'package.json'))?.type === 'module'
+    ? readJson<{ type?: string }>(join(root, 'package.json'), root)?.type === 'module'
       ? 'esm'
       : 'cjs'
     : 'unknown';

@@ -166,3 +166,31 @@ See [.env.example](.env.example). Required for AI features: `OPENROUTER_API_KEY`
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the code maps to the specification, and the explicit non-goals.
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — graph + relational schema reference.
+
+## Web workspace and sign-in
+
+Run `npm run dev:api` and `npm run dev:web`, then open `http://localhost:3000`.
+The landing page and the labeled `/repositories/demo` sample are public. The dashboard,
+real repositories, and API routes require Google sign-in in every environment.
+
+Configure `SESSION_SECRET` (at least 32 characters), `SUPABASE_URL`, and
+`SUPABASE_SERVICE_ROLE_KEY` on the API host. Enable Google in Supabase Auth and allow
+`http://localhost:3000/api/auth/supabase/callback` locally, plus the corresponding
+HTTPS callback for production. Google credentials belong in the Supabase provider
+settings. There is no workspace password or magic-link step.
+
+PostgreSQL is required in production. API startup applies migration 2, which adds
+revocable user sessions and encrypted per-user GitHub credentials. Each Google subject
+gets its own workspace; client organization headers cannot select a different account.
+Previous shared repositories are preserved but are not automatically assigned to any user.
+
+Public GitHub repositories can be connected directly. For private repositories, connect
+your own GitHub token in the repository connection panel. Shared server tokens and
+unlinked GitHub App installations cannot grant users access to private repositories.
+Local checkout paths are available through the CLI, not the web API.
+
+See [SECURITY.md](SECURITY.md) for the implemented boundaries and deployment checks.
+
+### Production Google redirect
+
+Set the API `APP_URL` to your public web origin. In Supabase Authentication > URL Configuration, add the exact callback `https://thread-orpin-zeta.vercel.app/api/auth/supabase/callback` to Redirect URLs (and `http://localhost:3000/api/auth/supabase/callback` for local development). The callback URL is stable; the intended workspace destination stays in the signed, HttpOnly PKCE cookie. Root-level OAuth callbacks are forwarded to the same verifier-protected endpoint. Start a fresh Google sign-in after changing deployment configuration; a callback without the original browser's verifier cookie cannot authenticate.

@@ -60,7 +60,7 @@ export function RepoShell({
         <div className="repo-header-inner">
           <form onSubmit={switchBranch} className="repo-header-main">
             <Button asChild variant="outline" size="icon" className="repo-back-btn">
-              <Link href="/" aria-label="Back to repositories" title="Back to repositories">
+              <Link href="/dashboard" aria-label="Back to repositories" title="Back to repositories">
                 <ArrowLeft aria-hidden="true" />
               </Link>
             </Button>
@@ -76,12 +76,13 @@ export function RepoShell({
               value={branch}
               onChange={(event) => setBranch(event.target.value)}
               maxLength={255}
+              disabled={repository.id === 'demo'}
             />
             <Button
               type="submit"
               size="sm"
               variant="outline"
-              disabled={switching || !branch.trim() || branch.trim() === repository.branch}
+              disabled={repository.id === 'demo' || switching || !branch.trim() || branch.trim() === repository.branch}
               className="repo-switch-btn"
             >
               {switching ? 'Switching…' : 'Switch'}
@@ -108,6 +109,7 @@ export function RepoShell({
           </Alert>
         )}
       </header>
+      {repository.id === 'demo' && <div className="sample-banner"><span>Sample workspace · Illustrative data · Read-only</span><Link href="/dashboard#connect">Connect your repository →</Link></div>}
       <main className="repo-main">{children}</main>
     </div>
   );

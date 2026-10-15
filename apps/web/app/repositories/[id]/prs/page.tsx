@@ -1,4 +1,5 @@
 'use client';
+import { demoResponse } from '@/lib/demo';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -88,6 +89,7 @@ interface ReviewJobRow {
 }
 
 async function getJson<T>(path: string): Promise<T> {
+  if (path.startsWith('/api/repositories/demo/')) return demoResponse(path) as T;
   const res = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -263,6 +265,7 @@ export default function PullRequestsPage() {
   }
 
   async function reviewNow(pr: PullRequestRow, postNewComment = false) {
+    if (id === 'demo') { setError('Sample workspace is read-only. Connect your repository to run a review.'); return; }
     setBusyPr(pr.number);
     setError(null);
     try {
@@ -317,7 +320,7 @@ export default function PullRequestsPage() {
           </div>
         </motion.div>
 
-        {capability && !capability.canComment && (
+        {id !== 'demo' && capability && !capability.canComment && (
           <motion.div
             style={{ marginBottom: 16 }}
             initial={{ opacity: 0, y: -8 }}
@@ -519,7 +522,7 @@ export default function PullRequestsPage() {
                       <Button
                         type="button"
                         onClick={() => void reviewNow(pr, Boolean(commentUrl))}
-                        disabled={jobActive || busyPr === pr.number}
+                        disabled={id === 'demo' || jobActive || busyPr === pr.number}
                         style={{ marginLeft: 'auto' }}
                         title={commentUrl ? 'Publish a fresh GitHub comment for this review' : 'Run a PR review'}
                       >

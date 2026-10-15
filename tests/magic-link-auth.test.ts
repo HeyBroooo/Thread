@@ -1,111 +1,182 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resetConfigCache } from '@cbi/shared';
-import { createApp } from '../apps/api/src/app.js';
-
-const environmentKeys = [
-  'APP_URL',
-  'ADMIN_PASSWORD',
-  'ADMIN_PASSWORD_HASH',
-  'SESSION_SECRET',
-  'NODE_ENV',
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'RESEND_API_KEY',
-  'AUTH_EMAIL_FROM',
-] as const;
-const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  const environment = process.env as Record<string, string | undefined>;
-  for (const key of environmentKeys) {
-    const value = originalEnvironment.get(key);
-    if (value === undefined) delete environment[key];
-    else environment[key] = value;
-  }
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { resetConfigCache } from "@cbi/shared";
+import { createApp } from "../apps/api/src/app.js";
+import {
+  verifySignedToken,
+  sessionTokenFromCookie,
+} from "../apps/api/src/auth.js";
+const secret = "test-session-secret-that-is-long-enough";
+let stateDir = "";
+beforeEach(() => {
+  stateDir = mkdtempSync(join(tmpdir(), "archthread-oauth-"));
+  vi.stubEnv("APP_URL", "https://thread.example.com");
+  vi.stubEnv("SESSION_SECRET", secret);
+  vi.stubEnv("SUPABASE_URL", "https://supabase.example.com");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key");
+  vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("DATABASE_URL", "");
+  vi.stubEnv("CBI_STATE_DIR", stateDir);
   resetConfigCache();
 });
-
-describe('magic-link sign-in', () => {
-  it('sends a one-time email link and consumes it only once', async () => {
-    const environment = process.env as Record<string, string | undefined>;
-    process.env.APP_URL = 'https://thread.example.com';
-    process.env.ADMIN_PASSWORD = 'shared-entry-password';
-    process.env.ADMIN_PASSWORD_HASH = '';
-    process.env.SESSION_SECRET = 'test-session-secret-that-is-long-enough';
-    process.env.SUPABASE_URL = 'https://supabase.example.com';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
-    process.env.RESEND_API_KEY = 'test-resend-key';
-    process.env.AUTH_EMAIL_FROM = 'ArchThread <login@example.com>';
-    environment.NODE_ENV = 'test';
-    resetConfigCache();
-
-    let emailHtml = '';
-    let tokenConsumed = false;
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const payload = JSON.parse(String(init?.body)) as { html?: string };
-      if (url.endsWith('/auth/v1/admin/generate_link')) {
-        return new Response(JSON.stringify({ hashed_token: 'supabase-one-time-token' }), { status: 200 });
-      }
-      if (url === 'https://api.resend.com/emails') {
-        emailHtml = payload.html ?? '';
-        return new Response(JSON.stringify({ id: 'email_test' }), { status: 200 });
-      }
-      if (url.endsWith('/auth/v1/verify')) {
-        if (tokenConsumed) return new Response(JSON.stringify({ msg: 'Token has expired or is invalid' }), { status: 400 });
-        tokenConsumed = true;
-        return new Response(JSON.stringify({ user: { email: 'person@example.com' } }), { status: 200 });
-      }
-      throw new Error(`Unexpected auth request: ${url}`);
-    }));
-
-    const app = createApp();
-    const sent = await app.request('/api/auth/magic-link', {
-      method: 'POST',
-      headers: {
-        origin: 'https://thread.example.com',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ email: 'person@example.com', from: '/repositories/repo_1' }),
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  resetConfigCache();
+  rmSync(stateDir, { recursive: true, force: true });
+});
+async function start(from = "/dashboard") {
+  const app = createApp();
+  const response = await app.request(
+    `/api/auth/google/start?from=${encodeURIComponent(from)}`,
+    { headers: { "x-forwarded-for": stateDir } },
+  );
+  expect(response.status).toBe(302);
+  const authorization = new URL(response.headers.get("location")!);
+  const callback = new URL(authorization.searchParams.get("redirect_to")!);
+  const cookie = response.headers.get("set-cookie")!.split(";")[0]!;
+  return { app, response, authorization, callback, cookie };
+}
+const googleUser = {
+  id: "google-user-123",
+  email: "person@example.com",
+  email_confirmed_at: "2026-10-01T00:00:00Z",
+  app_metadata: { provider: "google" },
+};
+describe("Google-only OAuth", () => {
+  it("uses PKCE and creates a complete user session in one Google callback", async () => {
+    const flow = await start("/repositories/my-repo");
+    expect(flow.authorization.searchParams.get("provider")).toBe("google");
+    expect(flow.authorization.searchParams.get("code_challenge_method")).toBe(
+      "s256",
+    );
+    expect(flow.callback.toString()).toBe(
+      "https://thread.example.com/api/auth/supabase/callback",
+    );
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          access_token: "verified-access-token",
+          user: googleUser,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    flow.callback.searchParams.set("code", "one-time-code");
+    const response = await flow.app.request(
+      flow.callback.pathname + flow.callback.search,
+      { headers: { cookie: flow.cookie } },
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://thread.example.com/repositories/my-repo",
+    );
+    const cookies = response.headers.get("set-cookie")!;
+    expect(cookies).toContain("HttpOnly");
+    expect(cookies).toContain("SameSite=Lax");
+    expect(cookies).toContain("cbi_supabase_oauth_state=;");
+    const token = sessionTokenFromCookie(cookies.split(",")[0]);
+    expect(verifySignedToken(token, secret)).toMatchObject({
+      version: 2,
+      provider: "google",
+      userId: googleUser.id,
+      email: googleUser.email,
     });
-    expect(sent.status).toBe(200);
-    expect(await sent.json()).toEqual({ sent: true });
-    expect(emailHtml).toContain('ArchThread');
-
-    const href = emailHtml.match(/href="([^"]*\/api\/auth\/magic\/verify[^"]*)"/)?.[1];
-    if (!href) throw new Error('Magic-link URL was not rendered in the email.');
-    const verifyUrl = new URL(href.replace(/&amp;/g, '&'));
-    expect(verifyUrl.searchParams.get('token_hash')).toBe('supabase-one-time-token');
-    const firstUse = await app.request(`${verifyUrl.pathname}${verifyUrl.search}`);
-    expect(firstUse.status).toBe(302);
-    expect(firstUse.headers.get('set-cookie')).toContain('cbi_admin_session=');
-    expect(firstUse.headers.get('location')).toContain('/login?entry=1');
-
-    const replay = await app.request(`${verifyUrl.pathname}${verifyUrl.search}`);
-    expect(replay.status).toBe(302);
-    expect(replay.headers.get('location')).toContain('error=magic-link');
+    const session = await flow.app.request("/api/auth/session", {
+      headers: { cookie: cookies.split(";")[0]! },
+    });
+    expect(await session.json()).toMatchObject({
+      authenticated: true,
+      email: googleUser.email,
+    });
+    expect(
+      JSON.parse((fetchMock.mock.calls[0]?.[1]?.body as string) ?? "{}"),
+    ).toBeDefined();
   });
-
-  it('starts Google OAuth through Supabase PKCE without Google credentials in app env', async () => {
-    const environment = process.env as Record<string, string | undefined>;
-    process.env.APP_URL = 'https://thread.example.com';
-    process.env.ADMIN_PASSWORD = 'shared-entry-password';
-    process.env.SESSION_SECRET = 'test-session-secret-that-is-long-enough';
-    process.env.SUPABASE_URL = 'https://supabase.example.com';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
-    environment.NODE_ENV = 'production';
-    resetConfigCache();
-
+  it("rejects mismatched OAuth state without exchanging a code", async () => {
+    const flow = await start();
+    flow.callback.searchParams.set("state", "attacker-state");
+    flow.callback.searchParams.set("code", "code");
+    const mock = vi.fn();
+    vi.stubGlobal("fetch", mock);
+    const response = await flow.app.request(
+      flow.callback.pathname + flow.callback.search,
+      { headers: { cookie: flow.cookie } },
+    );
+    expect(response.headers.get("location")).toContain("error=supabase");
+    expect(mock).not.toHaveBeenCalled();
+  });
+  it.each(["", "cbi_supabase_oauth_state=tampered"])(
+    "rejects missing or invalid PKCE cookies: %s",
+    async (cookie) => {
+      const flow = await start();
+      const mock = vi.fn();
+      vi.stubGlobal("fetch", mock);
+      const response = await flow.app.request(
+        "/api/auth/supabase/callback?code=untrusted",
+        { headers: { cookie } },
+      );
+      expect(response.headers.get("location")).toContain("error=supabase");
+      expect(mock).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "https://evil.example",
+    "//evil.example",
+    "/\\evil.example",
+    "/\nevil",
+  ])("rejects unsafe return path %s", async (from) => {
+    const flow = await start(from);
+    expect(
+      verifySignedToken(flow.cookie.split("=").slice(1).join("="), secret)
+        ?.returnTo,
+    ).toBe("/dashboard");
+  });
+  it.each([
+    { ...googleUser, app_metadata: { provider: "email" } },
+    { ...googleUser, email_confirmed_at: null },
+  ])(
+    "does not issue sessions for non-Google or unverified identities",
+    async (user) => {
+      const flow = await start();
+      flow.callback.searchParams.set("code", "code");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ access_token: "token", user })),
+      );
+      const response = await flow.app.request(
+        flow.callback.pathname + flow.callback.search,
+        { headers: { cookie: flow.cookie } },
+      );
+      expect(response.headers.get("location")).toContain("error=supabase");
+      expect(response.headers.get("set-cookie")).not.toContain(
+        "cbi_admin_session=",
+      );
+    },
+  );
+  it("retires email-link and password sign-in", async () => {
     const app = createApp();
-    const response = await app.request('/api/auth/google/start?from=%2Frepositories%2Frepo_1');
-    expect(response.status).toBe(302);
-    const authorization = new URL(response.headers.get('location')!);
-    expect(authorization.origin).toBe('https://supabase.example.com');
-    expect(authorization.pathname).toBe('/auth/v1/authorize');
-    expect(authorization.searchParams.get('provider')).toBe('google');
-    expect(authorization.searchParams.get('code_challenge_method')).toBe('s256');
-    expect(authorization.searchParams.get('redirect_to')).toContain('/api/auth/supabase/callback');
-    expect(response.headers.get('set-cookie')).toContain('cbi_supabase_oauth_state=');
+    for (const path of [
+      "/api/auth/entry",
+      "/api/auth/login",
+      "/api/auth/magic-link",
+    ])
+      expect(
+        (
+          await app.request(path, {
+            method: "POST",
+            headers: { origin: "https://thread.example.com" },
+          })
+        ).status,
+      ).toBe(410);
+    expect(
+      (await app.request("/api/auth/magic/verify?token_hash=old")).status,
+    ).toBe(410);
+  });
+  it("sets secure cookies for HTTPS production deployments", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    resetConfigCache();
+    const flow = await start();
+    expect(flow.response.headers.get("set-cookie")).toContain("Secure");
   });
 });

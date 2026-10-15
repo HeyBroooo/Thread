@@ -221,6 +221,7 @@ export function ChatPanel({
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          aria-label="Ask about this codebase"
           placeholder="Ask about this codebase…"
           disabled={busy}
         />

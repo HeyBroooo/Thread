@@ -70,71 +70,19 @@ describe('admin session auth', () => {
     await expect(verifyPassword('anything', 'plaintext')).resolves.toBe(false);
   });
 
-  it('requires identity sign-in and the entry password before exposing API data', async () => {
-    const salt = randomBytes(16);
-    const hash = scryptSync('correct horse battery staple', salt, 64);
+  it('rejects old admin/password sessions and has no password elevation endpoint', async () => {
     process.env.APP_URL = 'https://thread.example.com';
-    process.env.ADMIN_USERNAME = 'Admin';
-    process.env.ADMIN_PASSWORD = '';
-    process.env.ADMIN_PASSWORD_HASH = `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
     process.env.SESSION_SECRET = 'test-session-secret-that-is-long-enough';
     process.env.SUPABASE_URL = 'https://supabase.example.com';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
-    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
     resetConfigCache();
     const app = createApp();
-
-    const blocked = await app.request('/api/repositories');
-    expect(blocked.status).toBe(401);
-    expect((await blocked.json()).error.code).toBe('AUTH_REQUIRED');
-
-    const legacyCookie = sessionCookie(
-      createSessionToken('Admin', process.env.SESSION_SECRET!),
-      true,
-    ).split(';')[0]!;
-    const legacySession = await app.request('/api/repositories', {
-      headers: { cookie: legacyCookie },
-    });
-    expect(legacySession.status).toBe(401);
-    expect((await legacySession.json()).error.code).toBe('AUTH_REQUIRED');
-
-    const identityToken = createIdentitySessionToken('person@example.com', process.env.SESSION_SECRET!);
-    const identityCookie = sessionCookie(identityToken, true).split(';')[0]!;
-    const identityOnly = await app.request('/api/repositories', {
-      headers: { cookie: identityCookie },
-    });
-    expect(identityOnly.status).toBe(401);
-    expect((await identityOnly.json()).error.code).toBe('ENTRY_PASSWORD_REQUIRED');
-
-    const session = await app.request('/api/auth/session', {
-      headers: { cookie: identityCookie },
-    });
-    expect(await session.json()).toEqual({
-      authenticated: false,
-      identityAuthenticated: true,
-      email: 'person@example.com',
-    });
-
-    const login = await app.request('/api/auth/entry', {
-      method: 'POST',
-      headers: {
-        origin: 'https://thread.example.com',
-        cookie: identityCookie,
-        'content-type': 'application/json',
-        'x-forwarded-for': `test-${randomBytes(4).toString('hex')}`,
-      },
-      body: JSON.stringify({ password: 'correct horse battery staple' }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get('set-cookie');
-    if (!cookie) throw new Error('Login did not set a session cookie.');
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('Secure');
-    expect(cookie).toContain('Max-Age=86400');
-
-    const verifiedSession = await app.request('/api/auth/session', {
-      headers: new Headers({ cookie: cookie!.split(';')[0]! }),
-    });
-    expect(await verifiedSession.json()).toMatchObject({ authenticated: true, identityAuthenticated: true });
+    for (const token of [undefined, createSessionToken('Admin',process.env.SESSION_SECRET), createIdentitySessionToken('person@example.com',process.env.SESSION_SECRET)]) {
+      const response=await app.request('/api/repositories',{headers:token?{cookie:sessionCookie(token,false).split(';')[0]!}:{}});
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe('AUTH_REQUIRED');
+    }
+    const password=await app.request('/api/auth/entry',{method:'POST',headers:{origin:'https://thread.example.com','content-type':'application/json'},body:JSON.stringify({password:'anything'})});
+    expect(password.status).toBe(410);
   });
 });

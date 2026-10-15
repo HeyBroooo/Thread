@@ -51,7 +51,7 @@ export class JobQueue {
 
   enqueue(kind: JobKind, repositoryId: string, payload: Record<string, unknown> = {}, requestId?: string): JobRecord {
     const job: JobRecord = {
-      id: `job_${uuid().slice(0, 8)}`,
+      id: `job_${uuid()}`,
       kind,
       repositoryId,
       status: 'QUEUED',

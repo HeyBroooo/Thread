@@ -284,11 +284,11 @@ export default function RepositoryOverviewPage() {
               variant="outline"
               className="btn-outline"
               onClick={() => void startIndex(true)}
-              disabled={busy || running || !repository.indexedCommitSha}
+              disabled={repository.id === 'demo' || busy || running || !repository.indexedCommitSha}
             >
               Incremental update
             </Button>
-            <Button type="button" className="btn-primary" onClick={() => void startIndex(false)} disabled={busy || running}>
+            <Button type="button" className="btn-primary" onClick={() => void startIndex(false)} disabled={repository.id === 'demo' || busy || running}>
               {repository.indexedCommitSha ? 'Full reindex' : 'Start indexing'}
             </Button>
           </div>

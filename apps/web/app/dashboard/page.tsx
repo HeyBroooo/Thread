@@ -1,447 +1,464 @@
-'use client';
+"use client";
+import { SessionControls } from '@/components/SessionControls';
 
-import { useCallback, useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import Link from 'next/link';
-import { ArrowRight, GitPullRequest, Map, MessagesSquare, Network, ShieldCheck, Zap, Layers, FolderOpen, FileCode, BarChart3, Search, TrendingUp, MessageSquare } from 'lucide-react';
-import { api, type RepositoryPayload } from '@/lib/api';
-import { FloatingNavbar } from '@/components/ui/floating-navbar';
-import { ConnectCard } from '@/components/ui/connect-card';
-import { RepoCard } from '@/components/ui/repo-card';
-import { SectionHeading } from '@/components/ui/section-heading';
-import { TechMarquee } from '@/components/ui/tech-marquee';
-import { FeatureRow } from '@/components/ui/feature-row';
-import { CanvasShowcase, ChatMock, ImpactMock } from '@/components/ui/product-mocks';
-import { FaqAccordion } from '@/components/ui/faq-accordion';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { StatusPill } from '@/components/RepoShell';
-
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08 } },
-};
-const item = {
-  hidden: { opacity: 0, y: 18, filter: 'blur(4px)' },
-  show: {
-    opacity: 1,
-    y: 0,
-    filter: 'blur(0px)',
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
-  },
-};
-
-const FEATURES = [
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Plus,
+  Search,
+  LayoutDashboard,
+  Network,
+  MessagesSquare,
+  GitPullRequest,
+  BookOpen,
+  GitBranch,
+  FolderGit2,
+  FileCode2,
+  RefreshCw,
+  SlidersHorizontal,
+  ShieldCheck,
+  CircleHelp,
+  X,
+} from "lucide-react";
+import { Brand } from "@/components/Brand";
+import { api, type RepositoryPayload } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ConnectCard } from "@/components/ui/connect-card";
+import { RepoCard } from "@/components/ui/repo-card";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { DEMO_REPOSITORY } from "@/lib/demo";
+const tools = [
   {
     icon: Network,
-    title: 'Codebase Canvas',
-    body: 'Force, radial, cluster and collapsible tree layouts — chosen automatically by repository size. Every node carries evidence. Zoom from an architecture overview to a single symbol without leaving the graph.',
+    title: "See the bigger picture",
+    body: "Explore every connection in your codebase.",
+    path: "canvas",
+    label: "Open canvas",
+    className: "mint",
   },
   {
     icon: MessagesSquare,
-    title: 'Grounded Chat',
-    body: 'Retrieval-first answers: search → bounded graph traversal → compact evidence → model → validation. Every reply cites the exact file and line it was built from.',
+    title: "A question worth asking",
+    body: "Get answers with the evidence attached.",
+    path: "chat",
+    label: "Start a conversation",
+    className: "blue",
   },
   {
     icon: GitPullRequest,
-    title: 'Impact Analysis',
-    body: 'PR diffs map to changed symbols; direct and indirect dependents are computed so reviewers see blast radius, not just the diff. Nothing exists in isolation.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Validated Findings',
-    body: 'Every finding is checked against the graph before it is posted — file exists, line in range, severity valid, duplicates removed. Evidence first, AI second.',
-  },
-  {
-    icon: Search,
-    title: 'Symbol Search',
-    body: 'Jump to any function, component or route in milliseconds. The index is built from your checkout, so answers are grounded in what you actually ship.',
-  },
-  {
-    icon: Layers,
-    title: 'Dependency Map',
-    body: 'Imports, calls, API targets and server routes become one navigable map across files, packages and workspaces. Everything traces back.',
-  },
-  {
-    icon: FolderOpen,
-    title: 'Canvas Layouts',
-    body: 'Force, radial, cluster and collapsible tree layouts are picked automatically by repository size, so the graph breathes at every scale.',
-  },
-  {
-    icon: FileCode,
-    title: 'Grounded Reviews',
-    body: 'PR review maps changed lines to symbols and validates every finding before it reaches you. No citations, no guess.',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Change-Aware Reviews',
-    body: 'Reviewers see blast radius — direct and indirect dependents — so you know what a diff actually touches before it lands.',
-  },
-  {
-    icon: MessageSquare,
-    title: 'Evidence-Backed Chat',
-    body: 'Chat retrieves graph evidence before calling the model. Answers are compact, cited and checked against the graph before posting.',
+    title: "A little more confidence",
+    body: "See the impact before you merge.",
+    path: "prs",
+    label: "Review changes",
+    className: "peach",
   },
 ];
-
 export default function DashboardPage() {
   const [repositories, setRepositories] = useState<RepositoryPayload[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<RepositoryPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [connect, setConnect] = useState(false);
+  const [pending, setPending] = useState<RepositoryPayload | null>(null);
   const [deleting, setDeleting] = useState(false);
-
   const load = useCallback(async () => {
     try {
       const data = await api.listRepositories();
       setRepositories(data.repositories);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : "Could not load repositories.");
     } finally {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => {
     void load();
     const timer = setInterval(() => {
-      void load();
-    }, 4000);
-    return () => clearInterval(timer);
+      if (document.visibilityState === "visible") void load();
+    }, 10000);
+    const refresh = () => void load();
+    window.addEventListener("repository-created", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("repository-created", refresh);
+    };
   }, [load]);
-
-  const totalNodes = repositories.reduce((acc, r) => acc + (r.latestJob?.nodesCreated ?? 0), 0);
-  const totalEdges = repositories.reduce((acc, r) => acc + (r.latestJob?.edgesCreated ?? 0), 0);
-  const totalFiles = repositories.reduce((acc, r) => acc + (r.latestJob?.filesProcessed ?? 0), 0);
-
-  function requestDelete(id: string) {
-    const repository = repositories.find((repoItem) => repoItem.id === id);
-    if (repository) setPendingDelete(repository);
-  }
-
-  async function confirmDelete() {
-    if (!pendingDelete) return;
+  useEffect(() => {
+    if (window.location.hash === "#connect") setConnect(true);
+  }, []);
+  const displayed = repositories.filter(
+    (r) =>
+      `${r.owner}/${r.name}`.toLowerCase().includes(query.toLowerCase()) &&
+      (filter === "all" || r.indexStatus === "READY"),
+  );
+  const totals = repositories.reduce(
+    (a, r) => ({
+      files: a.files + (r.latestJob?.filesProcessed ?? 0),
+      nodes: a.nodes + (r.latestJob?.nodesCreated ?? 0),
+      edges: a.edges + (r.latestJob?.edgesCreated ?? 0),
+    }),
+    { files: 0, nodes: 0, edges: 0 },
+  );
+  const activeRepo =
+    repositories.find((r) => r.indexStatus === "READY")?.id ?? "demo";
+  async function remove() {
+    if (!pending) return;
     setDeleting(true);
     try {
-      await api.deleteRepository(pendingDelete.id);
-      setPendingDelete(null);
+      await api.deleteRepository(pending.id);
+      setPending(null);
       await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not remove the repository.');
-      setPendingDelete(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove repository.");
     } finally {
       setDeleting(false);
     }
   }
-
   return (
-    <div className="dashboard">
-      {/* Spline background removed for cleaner UI */}
-      <FloatingNavbar />
-
-      <header className="dashboard-hero">
-        <div className="dashboard-hero-inner">
-          <div className="dashboard-hero-identity">
-            <div className="dashboard-hero-look">
-              <ShieldCheck size={15} strokeWidth={2} aria-hidden="true" />
-              <span className="dashboard-hero-label">Signed in as Admin</span>
-            </div>
-            <Link href="/repositories" className="dashboard-hero-brand">
-              Codebase Intelligence
-            </Link>
-          </div>
-          <h1 className="dashboard-hero-title">Your knowledge graph, live</h1>
-          <p className="dashboard-hero-sub">
-            Index, explore, ask and review — every surface reads from the same evidence.
-          </p>
+    <div className="workspace-layout">
+      <aside className="workspace-sidebar">
+        <Brand />
+        <button className="workspace-switch" onClick={() => setConnect(true)}>
+          <span className="workspace-avatar">P</span>
+          <span>
+            Personal workspace<small>Private workspace</small>
+          </span>
+          <Plus size={14} />
+        </button>
+        <small className="sidebar-label">WORKSPACE</small>
+        <nav>
+          <Link className="active" href="/dashboard">
+            <LayoutDashboard /> Overview{" "}
+            <span className="nav-count">{repositories.length}</span>
+          </Link>
+          <Link href={`/repositories/${activeRepo}/canvas`}>
+            <Network /> Codebase canvas
+          </Link>
+          <Link href={`/repositories/${activeRepo}/chat`}>
+            <MessagesSquare /> Grounded chat
+          </Link>
+          <Link href={`/repositories/${activeRepo}/prs`}>
+            <GitPullRequest /> Pull requests
+          </Link>
+        </nav>
+        <small className="sidebar-label">RESOURCES</small>
+        <nav>
+          <Link href="/#workflow">
+            <BookOpen /> Getting started <ArrowUpRight size={13} />
+          </Link>
+          <Link href="/#faq">
+            <CircleHelp /> Help & FAQs
+          </Link>
+        </nav>
+        <div className="sidebar-guide">
+          <span className="guide-icon">
+            <ShieldCheck size={21} />
+          </span>
+          <h4>Context changes everything.</h4>
+          <p>Take a look around a connected sample codebase.</p>
+          <Link href="/repositories/demo">
+            Explore the demo <ArrowRight size={14} />
+          </Link>
         </div>
-      </header>
-
-      <main className="dashboard-app">
-        {error && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-            <Alert variant="destructive">
-              <AlertDescription>
-                {error}
-                <span className="mt-1 block text-xs opacity-80">
-                  Ensure the API is running and the API proxy target is configured correctly.
-                </span>
-              </AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
-
-        <section id="repos" className="dashboard-section">
-          <SectionHeading
-            eyebrow="Repositories"
-            title="The knowledge graph lives here"
-            sub="Index, explore, ask, review — every surface reads from the same evidence."
-          />
-
-          {loading && repositories.length === 0 ? (
-            <Card>
-              <CardContent className="space-y-2.5 pt-6">
-                <Skeleton className="h-3.5 w-2/5" />
-                <Skeleton className="h-3 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-              </CardContent>
-            </Card>
-          ) : repositories.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card>
-                <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-                  <span className="dashboard-empty-icon" aria-hidden="true">
-                    <Map size={26} strokeWidth={1.6} />
-                  </span>
-                  <h3 className="m-0 text-[15px] font-semibold">No repositories connected yet</h3>
-                  <p className="m-0 max-w-md text-[13px] text-muted-foreground">
-                    Connect your first repository above and the graph — canvas, chat and PR review —
-                    appears here.
-                  </p>
-                  <Button asChild size="sm" className="mt-2">
-                    <Link href="#connect">
-                      Connect a repository
-                      <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ) : (
-            <motion.div className="dashboard-repo-grid" variants={container} initial="hidden" animate="show">
-              <AnimatePresence initial={false}>
-                {repositories.map((repo) => (
-                  <motion.div
-                    key={repo.id}
-                    variants={item}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
-                  >
-                    <RepoCard
-                      repo={repo}
-                      onReindex={(id) => {
-                        api.startIndex(id)
-                          .then(() => load())
-                          .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-                      }}
-                      onDelete={requestDelete}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </section>
-
-        <section id="connect" className="dashboard-section lp-connect-shell">
-          <SectionHeading
-            eyebrow="Get started"
-            title="Connect a repository"
-            sub="Paste a GitHub URL — we clone it, parse it, and build the graph in seconds."
-          />
-          <ConnectCard />
-        </section>
-
-        <section id="features" className="dashboard-section lp-features">
-          <SectionHeading
-            eyebrow="Features"
-            title="One graph, every surface"
-            sub="The AI reasons over the graph. The AI does not construct it."
-          />
-
-          <div className="dashboard-feature-rows">
-            <FeatureRow
-              icon={Network}
-              eyebrow="Codebase canvas"
-              title="See the whole system at once"
-              body="Force, radial, cluster and collapsible tree layouts — picked automatically from repository size. Zoom from an architecture overview to a single symbol without leaving the canvas."
-              bullets={[
-                'Layout adapts from 50 files to 50,000',
-                'Every node shows its evidence',
-                'Hover to highlight blast radius',
-              ]}
-              visual={<CanvasShowcase />}
-            />
-            <FeatureRow
-              reverse
-              icon={MessagesSquare}
-              eyebrow="Grounded chat"
-              title="Answers that cite exact lines"
-              body="Retrieval runs first — search, bounded graph traversal, compact evidence — then the model answers and validation checks the claim. No citations, no answer."
-              bullets={[
-                'Citations with file and line numbers',
-                'Validated before it reaches you',
-                'Follow-up questions keep context',
-              ]}
-              visual={<ChatMock />}
-            />
-            <FeatureRow
-              icon={GitPullRequest}
-              eyebrow="Impact analysis"
-              title="Blast radius for every diff"
-              body="PR diffs map to changed symbols; direct and indirect dependents are computed so reviewers see what a change actually touches — not just the changed lines."
-              bullets={[
-                'Direct and indirect dependents',
-                'Findings validated against the graph',
-                'Duplicate findings removed before posting',
-              ]}
-              visual={<ImpactMock />}
-            />
+        <div className="sidebar-profile">
+          <span className="workspace-avatar">Y</span>
+          <span>
+            Your workspace<small>Signed in with Google</small>
+          </span>
+          <span className="status-dot" />
+        </div>
+      </aside>
+      <div className="workspace-content">
+        <header className="workspace-topbar">
+          <span>
+            Workspace <span className="breadcrumb-slash">/</span>{" "}
+            <strong>Overview</strong>
+          </span>
+          <div>
+            <span className="topbar-status">
+              <span className="status-dot" />{" "}
+              {error ? "Preview available" : "Workspace ready"}
+            </span>
+            <Link href="/#faq" aria-label="Help">
+              <CircleHelp size={18} />
+            </Link>
+            <SessionControls variant="inline" />
           </div>
-        </section>
-
-        <section className="dashboard-section">
-          <SectionHeading
-            eyebrow="Built for evidence"
-            title="Everything traces back"
-            sub="Every answer traces back to a symbol, an edge and a file."
-          />
+        </header>
+        <main className="workspace-main">
           <motion.div
-            className="dashboard-feature-grid"
-            variants={container}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
           >
-            {FEATURES.map((f) => (
-              <motion.div key={f.title} variants={item} className="dashboard-feature-card">
-                <span className="dashboard-feature-card-icon" aria-hidden="true">
-                  <f.icon size={17} strokeWidth={1.8} />
+            <div className="workspace-heading">
+              <div>
+                <span className="eyebrow">
+                  YOUR CODE. A CLEARER PERSPECTIVE.
                 </span>
-                <h3>{f.title}</h3>
-                <p>{f.body}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </section>
-
-        <section className="dashboard-section">
-          <SectionHeading
-            eyebrow="Numbers"
-            title="Built for evidence"
-            sub="Static analysis throughput on a modern laptop — with zero browser crawls."
-          />
-          <motion.div
-            className="dashboard-stat-grid"
-            variants={container}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-80px' }}
-          >
-            {[
-              { value: '150+', label: 'files per minute', desc: 'Static analysis throughput on a modern laptop' },
-              { value: '100%', label: 'evidence-backed', desc: 'Every node and edge carries source locations' },
-              { value: '0', label: 'browser crawls', desc: 'We clone — we never scrape the GitHub UI' },
-              { value: '4', label: 'surfaces, one graph', desc: 'Canvas, chat, PR review and impact analysis' },
-            ].map((s) => (
-              <motion.div key={s.label} variants={item} className="dashboard-stat-tile">
-                <div className="dashboard-stat-value">{s.value}</div>
-                <div className="dashboard-stat-label">{s.label}</div>
-                <div className="dashboard-stat-desc">{s.desc}</div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </section>
-
-        <section id="how" className="dashboard-section">
-          <SectionHeading
-            eyebrow="How it works"
-            title="Parse. Build. Explore. Reason."
-            sub="Static analysis builds the graph once — every surface reads from it."
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <ol className="dashboard-step-list">
-              <StepItem number="1" title="Parse" description="ts-morph extracts files, symbols, imports, calls, JSX, HTTP targets and server routes from a local checkout." />
-              <StepItem number="2" title="Build" description="Nodes and edges are assembled into a persistent graph — every relationship carries source evidence and a confidence value." />
-              <StepItem number="3" title="Explore" description="The canvas renders the graph with layouts that adapt to repository size; chat and PR review read from the same evidence." />
-              <StepItem number="4" title="Reason" description="Chat retrieves graph evidence before calling the model; PR review maps changed lines to symbols and validates every finding." />
-            </ol>
-          </motion.div>
-        </section>
-
-        <section id="faq" className="dashboard-section">
-          <SectionHeading
-            eyebrow="FAQ"
-            title="Frequently asked questions"
-            sub="Everything you might want to know before connecting a repository."
-          />
-          <FaqAccordion />
-        </section>
-
-        <section className="dashboard-section">
-          <div className="dashboard-cta">
-            <span className="dashboard-cta-glow" aria-hidden="true" />
-            <h2>Understand your codebase before you change it.</h2>
-            <p>
-              One evidence-backed graph powers the canvas, grounded chat and context-aware PR review.
-              Connect a repository and the graph appears in seconds.
-            </p>
-            <div className="dashboard-cta-actions">
-              <Button asChild size="lg" className="bg-white px-6 font-semibold text-primary shadow-md hover:bg-white/90">
-                <Link href="#connect">
-                  Connect a repository
-                  <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/30 bg-white/10 px-6 text-white backdrop-blur hover:bg-white/20 hover:text-white">
-                <Link href="#how">
-                  <Zap size={15} strokeWidth={2} aria-hidden="true" />
-                  How it works
-                </Link>
+                <h1>A good day to build.</h1>
+                <p>Here’s the big picture of your connected codebases.</p>
+              </div>
+              <Button onClick={() => setConnect(!connect)}>
+                <Plus /> Connect repository
               </Button>
             </div>
-          </div>
-        </section>
-      </main>
-
-      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+            <div className="metrics-grid">
+              {[
+                {
+                  label: "Repositories",
+                  value: repositories.length,
+                  icon: FolderGit2,
+                  note: "Connected to your workspace",
+                },
+                {
+                  label: "Files indexed",
+                  value: totals.files,
+                  icon: FileCode2,
+                  note: "Your source of truth",
+                },
+                {
+                  label: "Graph nodes",
+                  value: totals.nodes,
+                  icon: Network,
+                  note: "Every symbol, connected",
+                },
+                {
+                  label: "Relationships",
+                  value: totals.edges,
+                  icon: GitBranch,
+                  note: "Context between the lines",
+                },
+              ].map((m) => (
+                <div className="metric-card" key={m.label}>
+                  <div>
+                    <span>{m.label}</span>
+                    <m.icon size={17} />
+                  </div>
+                  <strong>{loading ? "—" : m.value.toLocaleString()}</strong>
+                  <small>{m.note}</small>
+                </div>
+              ))}
+            </div>
+            {connect && (
+              <section id="connect" className="connect-panel">
+                <div className="section-toolbar">
+                  <div>
+                    <h2>Connect a repository</h2>
+                    <p>A new perspective starts with your source code.</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setConnect(false)}
+                    aria-label="Close connect panel"
+                  >
+                    <X />
+                  </Button>
+                </div>
+                <ConnectCard />
+              </section>
+            )}
+            <section className="repositories-section">
+              <div className="section-toolbar">
+                <div>
+                  <h2>
+                    Your repositories{" "}
+                    <span className="count-chip">{repositories.length}</span>
+                  </h2>
+                  <p>A home for every codebase you’re getting to know.</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void load()}
+                  disabled={loading}
+                >
+                  <RefreshCw /> Refresh
+                </Button>
+              </div>
+              <div className="repository-filters">
+                <div className="filter-tabs">
+                  <button
+                    aria-pressed={filter === "all"}
+                    className={filter === "all" ? "active" : ""}
+                    onClick={() => setFilter("all")}
+                  >
+                    All repositories
+                  </button>
+                  <button
+                    aria-pressed={filter === "ready"}
+                    className={filter === "ready" ? "active" : ""}
+                    onClick={() => setFilter("ready")}
+                  >
+                    Ready to explore
+                  </button>
+                </div>
+                <label className="repository-search">
+                  <Search size={15} />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Find a repository…"
+                    aria-label="Find a repository"
+                  />
+                </label>
+              </div>
+              {error && (
+                <div role="status" className="connection-notice">
+                  <ShieldCheck size={16} />
+                  <span>
+                    The live API is unavailable. You can still explore every
+                    page with the sample workspace.
+                  </span>
+                  <Button variant="link" size="sm" onClick={() => void load()}>
+                    Retry
+                  </Button>
+                </div>
+              )}
+              {loading ? (
+                <div className="dashboard-loading">
+                  Loading your repositories…
+                </div>
+              ) : displayed.length ? (
+                <div className="dashboard-repositories">
+                  {displayed.map((repo) => (
+                    <RepoCard
+                      key={repo.id}
+                      repo={repo}
+                      onDelete={() => setPending(repo)}
+                      onReindex={(id) =>
+                        void api
+                          .startIndex(id)
+                          .then(load)
+                          .catch((e) => setError(e.message))
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="repository-empty">
+                  <span className="empty-symbol">
+                    <FolderGit2 size={27} />
+                  </span>
+                  <h3>
+                    {query
+                      ? "No matching repositories"
+                      : "Your next big idea starts here."}
+                  </h3>
+                  <p>
+                    {query
+                      ? "Try a different name or change the filter."
+                      : "Connect a repository to turn your code into a clearer picture."}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => (query ? setQuery("") : setConnect(true))}
+                  >
+                    {query ? "Clear search" : "Connect your first repository"}
+                    <ArrowRight />
+                  </Button>
+                </div>
+              )}
+            </section>
+            <section className="demo-repo-banner">
+              <div className="demo-repo-icon">
+                <Network size={24} />
+              </div>
+              <div>
+                <span className="eyebrow">A LITTLE HANDS-ON INSPIRATION</span>
+                <h3>Take a connected codebase for a spin.</h3>
+                <p>
+                  Explore {DEMO_REPOSITORY.owner}/{DEMO_REPOSITORY.name} with
+                  sample data. No setup needed.
+                </p>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/repositories/demo">
+                  Explore sample <ArrowUpRight />
+                </Link>
+              </Button>
+            </section>
+            <section>
+              <div className="section-toolbar">
+                <div>
+                  <h2>Find your next perspective</h2>
+                  <p>Three ways to get closer to your code.</p>
+                </div>
+                <span className="subtle-label">ONE GRAPH. EVERY ANGLE.</span>
+              </div>
+              <div className="workspace-tool-grid">
+                {tools.map((t) => (
+                  <Link
+                    className={`workspace-tool ${t.className}`}
+                    href={`/repositories/${activeRepo}/${t.path}`}
+                    key={t.path}
+                  >
+                    <span className="tool-icon">
+                      <t.icon size={21} />
+                    </span>
+                    <h3>{t.title}</h3>
+                    <p>{t.body}</p>
+                    <span>
+                      {t.label}
+                      <ArrowUpRight size={16} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+            <footer className="workspace-footer">
+              <span>
+                <ShieldCheck size={13} /> Evidence first. Always.
+              </span>
+              <span>Made for the way you think about code.</span>
+            </footer>
+          </motion.div>
+        </main>
+      </div>
+      <AlertDialog
+        open={!!pending}
+        onOpenChange={(open) => !open && !deleting && setPending(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove this repository?</AlertDialogTitle>
+            <AlertDialogTitle>Remove {pending?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingDelete
-                ? `${pendingDelete.owner}/${pendingDelete.name} and its indexed graph, jobs, and reviews will be deleted. This cannot be undone.`
-                : ''}
+              The repository, indexed graph, jobs, and reviews will be
+              permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>
+              Keep repository
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={deleting}
-              onClick={(event) => {
-                event.preventDefault();
-                void confirmDelete();
+              onClick={(e) => {
+                e.preventDefault();
+                void remove();
               }}
             >
-              {deleting ? 'Removing…' : 'Remove repository'}
+              {deleting ? "Removing…" : "Remove repository"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-
-function StepItem({ number, title, description }: { number: string; title: string; description: string }) {
-  return (
-    <li className="dashboard-step-item">
-      <span className="dashboard-step-number">{number}</span>
-      <div className="dashboard-step-body">
-        <h3 className="dashboard-step-title">{title}</h3>
-        <p className="dashboard-step-description">{description}</p>
-      </div>
-    </li>
   );
 }

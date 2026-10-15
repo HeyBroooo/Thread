@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { ApiEdge, ApiNode } from '@/lib/api';
 
@@ -373,7 +373,7 @@ export function GraphCanvas({
     setCollapsed(new Set());
   }, [nodes]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const svgEl = svgRef.current;
     if (!svgEl) return;
 
@@ -523,7 +523,7 @@ export function GraphCanvas({
             .attr('stroke-dasharray', '2 6')
             .attr('opacity', 0)
             .transition()
-            .duration(800)
+            .duration(0)
             .attr('opacity', 1);
         }
 
@@ -535,27 +535,9 @@ export function GraphCanvas({
           .join('path')
           .attr('fill', 'none')
           .attr('stroke', (d) => edgeColor(edgeTypeBetween(d.target.data.id, d.source.data.id, edges)))
-          .attr('stroke-opacity', 0)
+          .attr('stroke-opacity', 0.55)
           .attr('stroke-width', (d) => (edgeTypeBetween(d.target.data.id, d.source.data.id, edges) === 'CONTAINS' ? 1.2 : 1.6))
           .attr('d', linkPath);
-
-        // Draw-in animation: each link traces itself from parent to child.
-        linkSel.each(function () {
-          const len = (this as SVGPathElement).getTotalLength();
-          d3.select(this)
-            .attr('stroke-dasharray', `${len} ${len}`)
-            .attr('stroke-dashoffset', len);
-        });
-        linkSel
-          .transition()
-          .duration(600)
-          .delay((d) => d.target.depth * 60)
-          .ease(d3.easeCubicOut)
-          .attr('stroke-dashoffset', 0)
-          .attr('stroke-opacity', 0.55)
-          .on('end', function () {
-            d3.select(this).attr('stroke-dasharray', null);
-          });
 
         // Cross-links: the mode's real story (CALLS, RENDERS, CALLS_API…)
         // drawn as curves between final positions. Without these, switching
@@ -577,7 +559,7 @@ export function GraphCanvas({
           .attr('fill', 'none')
           .attr('stroke', (d) => edgeColor(d.edgeType))
           .attr('stroke-width', (d) => (d.edgeType === 'CALLS_API' ? 1.6 : 1.1))
-          .attr('stroke-opacity', 0)
+          .attr('stroke-opacity', 0.45)
           .attr('marker-end', (d) => (DIRECTED_CROSS.has(d.edgeType) ? 'url(#arrow)' : null))
           .attr('d', (d) => {
             const s = treePos.get(d.source)!;
@@ -592,8 +574,8 @@ export function GraphCanvas({
           });
         crossSel
           .transition()
-          .duration(420)
-          .delay(640)
+          .duration(0)
+          .delay(0)
           .attr('stroke-opacity', 0.45);
 
         const parentPos = (d: d3.HierarchyPointNode<TreeDatum>): string =>
@@ -610,7 +592,7 @@ export function GraphCanvas({
           .classed('highlighted', (d) => highlightSet.has(d.data.id))
           .classed('expandable', (d) => resolvedLayout === 'collapsible' && d.data.hasChildren)
           .style('cursor', 'pointer')
-          .attr('transform', parentPos)
+          .attr('transform', nodeTransform)
           .attr('opacity', 0)
           .on('click', (_event, d) => {
             if (resolvedLayout === 'collapsible' && d.data.hasChildren) {
@@ -650,7 +632,7 @@ export function GraphCanvas({
             .append('text')
             .text((d) => shortLabel(d.data.node.name))
             .attr('font-size', 10)
-            .attr('fill', '#cbd5e1')
+            .attr('fill', '#526d7e')
             .attr('pointer-events', 'none');
           if (resolvedLayout === 'radial') {
             // Dense radial rings can't fit every label — keep the structure
@@ -677,14 +659,7 @@ export function GraphCanvas({
           return `${d.data.node.name} (${d.data.node.nodeType})\n${d.data.node.filePath ?? ''}${hint}`;
         });
 
-        // Grow-in animation: every node eases out from its parent's position.
-        nodeSel
-          .transition()
-          .duration(560)
-          .delay((d) => d.depth * 50)
-          .ease(d3.easeCubicOut)
-          .attr('transform', nodeTransform)
-          .attr('opacity', 1);
+        nodeSel.attr('transform', nodeTransform).attr('opacity', 1);
 
         // Record final screen positions in root space (for focus/zoom) —
         // node transforms are layer-local, so the layer offset is added.
@@ -747,7 +722,7 @@ export function GraphCanvas({
           .attr('x', (d) => d.radius + 4)
           .attr('y', 3)
           .attr('font-size', 10)
-          .attr('fill', '#cbd5e1')
+          .attr('fill', '#526d7e')
           .attr('pointer-events', 'none');
       }
       nodeGroup.append('title').text((d) => `${d.name} (${d.nodeType})\n${d.filePath ?? ''}`);
@@ -770,7 +745,7 @@ export function GraphCanvas({
 
       simulationRef.current = simulation;
 
-      simulation.on('tick', () => {
+      const updatePositions = () => {
         link
           .attr('x1', (d) => (d.source as SimNode).x ?? 0)
           .attr('y1', (d) => (d.source as SimNode).y ?? 0)
@@ -778,7 +753,10 @@ export function GraphCanvas({
           .attr('y2', (d) => (d.target as SimNode).y ?? 0);
         nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
         for (const n of simNodes) positionsRef.current.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 });
-      });
+      };
+      simulation.stop().tick(180);
+      updatePositions();
+      simulation.on('tick', updatePositions);
 
       const drag = d3
         .drag<SVGGElement, SimNode>()
@@ -840,7 +818,7 @@ export function GraphCanvas({
       if (!svgEl) return;
       const svg = d3.select(svgEl);
       root.classed('labels-hidden', scale < minLabelScale);
-      svg.transition().duration(450).call(zoom.transform, fit);
+      svg.call(zoom.transform, fit);
     };
 
     if (!isForceRef.current) {
@@ -861,8 +839,8 @@ export function GraphCanvas({
               height / 2 - scale * (bbox.y + bbox.height / 2),
             )
             .scale(scale);
-          // Delay past the grow-in animation so the bounds are final.
-          svg.transition().duration(400).delay(620).call(zoom.transform, fit);
+          // Fit synchronously before paint: nodes never fly in from the header.
+          svg.call(zoom.transform, fit);
         }
       } catch {
         // getBBox can throw on a detached node; fitting is best-effort.
@@ -884,9 +862,11 @@ export function GraphCanvas({
           (d3.max(simNodes, (n) => n.y ?? 0) ?? 0) - (d3.min(simNodes, (n) => n.y ?? 0) ?? 0),
         );
       };
+      fitOnce();
       sim.on('end', fitOnce);
-      const timer = window.setTimeout(fitOnce, 2400);
+      const timer = window.setTimeout(fitOnce, 0);
       return () => {
+        sim.stop();
         sim.on('end', null);
         window.clearTimeout(timer);
       };
@@ -964,7 +944,8 @@ export function GraphCanvas({
           .scale(2)
           .translate(-target.x, -target.y);
         svg.interrupt();
-        svg.transition().duration(550).call(zoom.transform, t);
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) svg.call(zoom.transform, t);
+        else svg.transition().duration(300).call(zoom.transform, t);
       };
       window.clearTimeout(focusTimerRef.current);
       if (isForceRef.current) {
