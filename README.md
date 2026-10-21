@@ -207,3 +207,14 @@ In the archthread GitHub App registration:
 - For local OAuth testing, add `http://localhost:3000/api/github/connect/callback` as a callback and temporarily use `http://localhost:3000/api/github/connect/setup` as the Setup URL. Restore the production Setup URL afterward.
 
 Users connect public repositories immediately. For a private or inaccessible repository, **Continue with GitHub** opens installation and repository selection, then user authorization. The API checks the user's selected repositories before saving the authorization and returns to the original repository/branch. Organization approval requests show a pending state. PR review execution, polling, and webhooks require verified write access; readers cannot escalate to bot writes. Server-issued installation credentials are restricted to one verified repository and the permissions needed by this app. OAuth access and refresh credentials remain encrypted on the API host and refresh without browser token entry.
+
+
+<img width="2549" height="1313" alt="swash-2026-10-21_11:54:39" src="https://github.com/user-attachments/assets/07043f04-221a-4c8b-9097-f943698f0080" />
+<img width="2554" height="1316" alt="swash-2026-10-21_11:55:10" src="https://github.com/user-attachments/assets/903919b8-8edd-4c82-8b36-fe4bd4b91d42" />
+<img width="2551" height="1314" alt="swash-2026-10-21_11:55:51" src="https://github.com/user-attachments/assets/65381787-60ab-4386-baac-c2c47393aafa" />
+<img width="2551" height="1312" alt="swash-2026-10-21_11:56:31" src="https://github.com/user-attachments/assets/4834fc8c-a8f6-4320-8b96-433916bca693" />
+<img width="2551" height="1318" alt="swash-2026-10-21_11:56:59" src="https://github.com/user-attachments/assets/64b1e077-2421-4186-9bd6-5b794e08bea2" />
+
+
+
+
